@@ -406,6 +406,10 @@ Alt handler om prævention. Alt andet er støj.
 
   async function askOpenAI(text, chat) {
     try {
+      if (isGitHubPages()) {
+        system(chat, "GitHub Pages-versionen kan ikke bruge den lokale GPT-server. Koer appen via dev-server.js for GPT og OpenAI-tale.");
+        return fallbackReply(text);
+      }
       const history = messages.slice(-8).map((m) => `${m.role}: ${m.text}`).join("\n");
       const prompt =
         SYSTEM_PROMPT +
@@ -937,6 +941,10 @@ Alt handler om prævention. Alt andet er støj.
 
   async function saveKeyToLocalServer(nextApiKey, chat) {
     try {
+      if (isGitHubPages()) {
+        system(chat, "API-key er kun gemt i denne browser. GPT virker foerst, naar appen koerer med den lokale Node-server.");
+        return;
+      }
       const response = await fetch("/api/key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -950,6 +958,10 @@ Alt handler om prævention. Alt andet er støj.
     } catch (error) {
       system(chat, `Kunne ikke gemme API-key i lokal server: ${error.message || error}`);
     }
+  }
+
+  function isGitHubPages() {
+    return location.hostname.endsWith(".github.io");
   }
 
   function fallbackReply(text) {
