@@ -4,6 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT || 8000);
+const host = process.env.HOST || "0.0.0.0";
 const chatModel = process.env.PORTAL_OPENAI_MODEL || "gpt-4.1-mini";
 let runtimeApiKey = process.env.PORTAL_OPENAI_API_KEY || "";
 const types = {
@@ -143,7 +144,7 @@ http
       res.end(data);
     });
   })
-  .listen(port, "127.0.0.1", () => {
+  .listen(port, host, () => {
     console.log(`Doktor Portal server: http://localhost:${port}/portal-prevention-doctor/`);
   });
 

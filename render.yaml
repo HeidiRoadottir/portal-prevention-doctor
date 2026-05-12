@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: portal-prevention-doctor
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORTAL_OPENAI_API_KEY
+        sync: false
+      - key: PORTAL_OPENAI_MODEL
+        value: gpt-4.1-mini

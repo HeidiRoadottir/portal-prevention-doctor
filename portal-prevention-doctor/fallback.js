@@ -366,7 +366,8 @@ Alt handler om prævention. Alt andet er støj.
     renderStatus(status);
 
     const wasCompleted = consultation.completed;
-    const reply = consultationRunning ? consultationReply(text) : apiKey ? await askOpenAI(text, chat) : fallbackReply(text);
+    const canUseServerApi = !isGitHubPages() || apiKey;
+    const reply = consultationRunning ? consultationReply(text) : canUseServerApi ? await askOpenAI(text, chat) : fallbackReply(text);
     msg(chat, "doctor", reply);
     messages.push({ role: "assistant", text: reply });
     messages = messages.slice(-12);
@@ -1036,7 +1037,7 @@ Alt handler om prævention. Alt andet er støj.
     suspendRecognitionWhileSpeaking();
 
     try {
-      if (!apiKey || !USE_OPENAI_TTS) return await speakWithBrowser(text, runId);
+      if ((!apiKey && isGitHubPages()) || !USE_OPENAI_TTS) return await speakWithBrowser(text, runId);
       return await speakWithOpenAI(text, runId).catch(() => {
         if (runId !== speechRunId) return;
         return speakWithBrowser(text, runId);
