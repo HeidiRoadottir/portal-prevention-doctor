@@ -93,6 +93,7 @@ Alt handler om prævention. Alt andet er støj.
   let mediaTranscriptBusy = false;
   let lastMediaTranscript = "";
   let lastMediaTranscriptAt = 0;
+  let activeChat = null;
   let consultationRunning = false;
   let state = "idle";
   let apiKey = "";
@@ -153,6 +154,7 @@ Alt handler om prævention. Alt andet er støj.
     activeVoiceBtn = voiceBtn;
 
     const chat = el("div", "pd-chat", panel);
+    activeChat = chat;
     const compose = el("div", "pd-compose", panel);
     const input = el("textarea", "pd-textarea", compose);
     input.placeholder = "Skriv et spørgsmål om prævention...";
@@ -1245,8 +1247,12 @@ Alt handler om prævention. Alt andet er støj.
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
         const text = await transcribeAudio(blob);
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
-        if (shouldUseTranscript(text)) onText(text);
+        if (String(text || "").trim()) system(activeChat, `Transskription: ${text}`);
+        if (shouldUseTranscript(text)) {
+          await onText(text);
+        }
       } catch (error) {
+        system(activeChat, `Mikrofon/transskription-fejl: ${error.message || error}`);
         await sleep(800);
       }
     }
