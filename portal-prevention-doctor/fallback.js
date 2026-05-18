@@ -697,7 +697,7 @@ Alt handler om prævention. Alt andet er støj.
     if (isClearlyIrrelevant(text)) {
       return rejectCurrentInput();
     }
-    if (isDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
+    if (isHelpOrDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
     const explanation = explainUnknownTerm(text);
@@ -884,6 +884,30 @@ Alt handler om prævention. Alt andet er støj.
 
   function isContraceptionRelated(text) {
     return /prævention|praevention|beskyttelse|gravid|graviditet|baby|børn|boern|kønssygdom|koenssygdom|sygdom|klamydia|smitte|sex|samleje|kondom|femidom|pessar|pille|p-pille|mini-pille|spiral|kobber|hormon|stav|plaster|ring|sprøjte|sproejte|sterilisation|nødprævention|noedpraevention|menstruation|mens|blødning|bloeding|smerter|pms|akne|bumser|hud|pcos|endometriose|bivirkning|daglig|langvarig|akut|permanent|diskret|glemmer|nemt|let/i.test(text);
+  }
+
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    return /^(måske|maaske|ved ikke|det ved jeg ikke|ingen ide|pas|hvad|gentag|forstår ikke|forstaar ikke|hjælp|hjaelp|\?)$/.test(lower);
+  }
+
+  function answerMatchesQuestion(question, text) {
+    const lower = normalizeSpokenText(text);
+    if (!lower || isHelpOrDoubtInput(lower)) return false;
+
+    const checks = {
+      purpose: /graviditet|undgaa graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
+      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende/,
+      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
+    };
+
+    if (checks[question?.id]?.test(lower)) return true;
+    if (isContraceptionRelated(lower)) return true;
+
+    // OpenAI transcription returns natural Danish phrases, not button-like
+    // option values. After the session has started, accept substantive speech
+    // and let the recommendation logic infer what it can.
+    return lower.length >= 3;
   }
 
   function chooseRecommendation(answers) {
