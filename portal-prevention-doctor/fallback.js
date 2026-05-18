@@ -82,6 +82,7 @@ Alt handler om prævention. Alt andet er støj.
   let serialPort = null;
   let serialWriter = null;
   let serialReader = null;
+  let serialReadyAt = 0;
   let recognition = null;
   let listening = false;
   let recognitionSuspended = false;
@@ -174,11 +175,7 @@ Alt handler om prævention. Alt andet er støj.
     serialBtn.onclick = async () => {
       try {
         if (!navigator.serial) throw new Error("Web Serial kræver Chrome/Edge.");
-        serialPort = await navigator.serial.requestPort();
-        await serialPort.open({ baudRate: 115200 });
-        serialWriter = serialPort.writable.getWriter();
-        startSerialReader(input, chat, status, voiceBtn);
-        await sendState("ready");
+        await connectSerialPort(await navigator.serial.requestPort(), input, chat, status, voiceBtn);
         system(chat, "Robot forbundet.");
       } catch (error) {
         system(chat, `Serial-fejl: ${error.message || error}`);
@@ -228,6 +225,7 @@ Alt handler om prævention. Alt andet er støj.
     system(chat, "Fallback klar. Hvis Portal/p5 loader senere, så refresh siden efter internet virker.");
     renderStatus(status);
     animate(status);
+    autoConnectSerial(input, chat, status, voiceBtn);
   }
 
   function showFatal(message, stack) {
@@ -270,8 +268,50 @@ Alt handler om prævention. Alt andet er støj.
     }
   }
 
+  async function autoConnectSerial(input, chat, status, voiceBtn) {
+    if (!navigator.serial || serialWriter) return;
+
+    try {
+      const ports = await navigator.serial.getPorts();
+      if (!ports.length) {
+        system(chat, "Robot auto-connect: tryk Forbind robot en gang, saa kan Chromium huske porten bagefter.");
+        return;
+      }
+
+      await connectSerialPort(ports[0], input, chat, status, voiceBtn);
+      system(chat, "Robot auto-forbundet.");
+    } catch (error) {
+      system(chat, `Robot auto-connect fejlede: ${error.message || error}`);
+    } finally {
+      renderStatus(status);
+    }
+  }
+
+  async function connectSerialPort(port, input, chat, status, voiceBtn) {
+    if (!port) throw new Error("Ingen serial-port valgt.");
+
+    if (serialReader) {
+      await serialReader.cancel().catch(() => {});
+    }
+    if (serialWriter) {
+      serialWriter.releaseLock();
+      serialWriter = null;
+    }
+
+    serialPort = port;
+    if (!serialPort.readable || !serialPort.writable) {
+      await serialPort.open({ baudRate: 115200 });
+    }
+    serialWriter = serialPort.writable.getWriter();
+    serialReadyAt = Date.now();
+    startSerialReader(input, chat, status, voiceBtn);
+    await sendState("ready");
+    renderStatus(status);
+  }
+
   function handleSerialLine(line, input, chat, status, voiceBtn) {
     if (line === "BUTTON:start") {
+      if (Date.now() - serialReadyAt < 2500) return;
       toggleConsultation(input, chat, status, voiceBtn);
       return;
     }
@@ -331,7 +371,7 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function openingMessage() {
-    consultation.currentQuestionText = questionText(consultationQuestions[0]);
+    consultation.currentQuestionText = "Er du klar til at starte session?";
     return (
       "Velkommen til den automatiserede præventionsscreening. Jeg beregner prævention baseret på dine input.\n\n" +
       consultation.currentQuestionText
@@ -342,7 +382,7 @@ Alt handler om prævention. Alt andet er støj.
     const text = String(rawText || "").trim();
     if (!text) {
       if (consultationRunning && !consultation.completed) {
-        const reply = rejectCurrentInput("Manglende svar");
+        const reply = consultation.awaitingStart ? consultationReply("") : rejectCurrentInput();
         msg(chat, "doctor", reply);
         await speak(reply);
       }
@@ -376,10 +416,18 @@ Alt handler om prævention. Alt andet er støj.
     renderStatus(status);
     await speak(reply);
 
+    if (!consultationRunning && reply === "Tryk på START for at starte ny session.") {
+      stopListening();
+      if (activeVoiceBtn) activeVoiceBtn.textContent = "Start tale";
+      setState("idle");
+      renderStatus(status);
+      return;
+    }
+
     if (!wasCompleted && consultation.completed) {
       const recommendation = ensureRecommendation();
       await sleep(3000);
-      const analysisText = "Analyserer data.";
+      const analysisText = "… System beregner. …\nPræventionsformer: 14 metoder tilgængelige. 12 til kvindekroppe. 2 til mandekroppe. …\nBeregning fortsætter. …";
       msg(chat, "doctor", analysisText);
       messages.push({ role: "assistant", text: analysisText });
       messages = messages.slice(-12);
@@ -397,7 +445,6 @@ Alt handler om prævention. Alt andet er støj.
       await speak(result);
 
       msg(chat, "receipt", receiptPreview(recommendation, consultation.answers));
-      await printReceipt(chat);
       await finishConsultationAndReturnToStart(chat, status);
     }
 
@@ -452,30 +499,20 @@ Alt handler om prævention. Alt andet er støj.
     {
       id: "purpose",
       label: "Formål",
-      text: "Hvad er dit formål med præventionen?",
-      help: "Du kan tænke på om det handler om at undgå graviditet, påvirke din menstruation eller mindske smerter.",
-      reaction: "Svar registreret.",
-    },
-    {
-      id: "protection",
-      label: "Beskyttelsesbehov",
-      text: "Hvilken type beskyttelse har du brug for?",
-      help: "Du kan overveje om du vil beskytte dig mod graviditet, kønssygdomme eller begge dele.",
-      reaction: "Svar registreret.",
+      text: "Angiv formål: Ønsker du at undgå graviditet, beskytte mod kønssygdomme, regulere menstruation, eller kombination?",
+      help: "Okay … Lad mig specificere. Graviditet: beskyttelse mod befrugtning. Kønssygdomme: beskyttelse mod smitte. Menstruation: regulering af cyklus. Kombination: flere formål. Vælg én.",
     },
     {
       id: "usage",
       label: "Anvendelse",
-      text: "Hvordan ønsker du at bruge præventionen?",
-      help: "Du kan tænke på om det skal være noget du bruger dagligt, i en længere periode, som akut løsning eller permanent.",
-      reaction: "Svar registreret.",
+      text: "Angiv anvendelse: noget du skal huske hver dag, eller noget der virker i flere måneder eller år uden at du skal gøre noget løbende?",
+      help: "Okay … Lad mig specificere. Daglig brug: kræver handling hver dag. Langvarig løsning: ingen løbende handling påkrævet. Vælg én.",
     },
     {
       id: "methodType",
       label: "Metodetype",
-      text: "Hvilken type prævention foretrækker du?",
-      help: "Du kan overveje om du foretrækker hormonel, ikke-hormonel, akut eller permanent prævention.",
-      reaction: "Svar registreret.",
+      text: "Vælg præventionstype: Vil du have en metode med hormoner i kroppen, en uden hormoner, en akut løsning eller en permanent løsning?",
+      help: "Okay … Lad mig specificere. Hormoner: påvirker kroppens cyklus. Ingen hormoner: kroppen er uberørt. Akut: anvendes inden for 72 timer efter ubeskyttet sex. Permanent: kirurgisk indgreb — ikke reversibert. Vælg én.",
     },
   ];
 
@@ -490,9 +527,12 @@ Alt handler om prævention. Alt andet er støj.
       step: 0,
       answers: {},
       completed: false,
+      awaitingStart: true,
       recommendation: null,
       currentQuestionText: "",
       invalidCount: 0,
+      readyFailures: 0,
+      lastReceiptVariant: Math.random() < 0.5 ? "A" : "B",
     };
   }
 
@@ -595,6 +635,27 @@ Alt handler om prævention. Alt andet er støj.
       effects: ["Kan gå i stykker", "Kan glide af", "Nedsat følsomhed"],
       ansvar: "Mænd.",
     },
+    "KONDOM + SÆDDRÆBENDE MIDDEL": {
+      beskytter: "Graviditet",
+      anvendelse: "Bruges ved samleje.",
+      heading: "REGISTREREDE BIVIRKNINGER:",
+      effects: ["Irritation", "Ubehag", "Lavere effektivitet alene"],
+      ansvar: "Mænd.",
+    },
+    "HORMONSPIRAL + KONDOM": {
+      beskytter: "Graviditet + kønssygdomme",
+      anvendelse: "Hormonspiral indsættes i livmoderen. Kondom bruges ved samleje.",
+      heading: "REGISTREREDE BIVIRKNINGER:",
+      effects: ["Uregelmæssig blødning", "Hovedpine", "Smerter"],
+      ansvar: "Kvinder.",
+    },
+    "KOBBERSPIRAL + KONDOM": {
+      beskytter: "Graviditet + kønssygdomme",
+      anvendelse: "Kobberspiral indsættes i livmoderen. Kondom bruges ved samleje.",
+      heading: "REGISTREREDE BIVIRKNINGER:",
+      effects: ["Kraftigere menstruation", "Smerter", "Kramper"],
+      ansvar: "Kvinder.",
+    },
   };
 
   function consultationReply(text) {
@@ -606,22 +667,36 @@ Alt handler om prævention. Alt andet er støj.
       );
     }
 
+    if (consultation.awaitingStart) {
+      if (isReadyConfirmation(text)) {
+        consultation.awaitingStart = false;
+        consultation.readyFailures = 0;
+        consultation.currentQuestionText = questionText(consultationQuestions[0]);
+        return `Registreret. Vi begynder.\n…\n\n${consultation.currentQuestionText}`;
+      }
+
+      consultation.readyFailures += 1;
+      if (consultation.readyFailures >= 3) {
+        consultationRunning = false;
+        return "Tryk på START for at starte ny session.";
+      }
+      consultation.currentQuestionText = "Er du klar til at starte session?";
+      return consultation.currentQuestionText;
+    }
+
     const currentQuestion = consultationQuestions[consultation.step];
+    if (isUnseriousInput(text)) {
+      return rejectCurrentInput();
+    }
+    if (isClearlyIrrelevant(text)) {
+      return rejectCurrentInput();
+    }
+    if (isDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
+      return clarifyCurrentQuestion();
+    }
     const explanation = explainUnknownTerm(text);
     if (explanation) {
       return explainAndRepeatCurrentQuestion(explanation);
-    }
-    if (isDoubtInput(text)) {
-      return clarifyCurrentQuestion();
-    }
-    if (isUnseriousInput(text)) {
-      return rejectCurrentInput("Uden for tilladte svarmuligheder", "Sarkasme registreret. Relevans ikke fundet.");
-    }
-    if (isUnclearForQuestion(currentQuestion, text)) {
-      return clarifyCurrentQuestion();
-    }
-    if (isClearlyIrrelevant(text)) {
-      return rejectCurrentInput("Uden for tilladte svarmuligheder");
     }
     if (!answerMatchesQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
@@ -633,7 +708,7 @@ Alt handler om prævention. Alt andet er støj.
     }
 
     if (consultation.step < consultationQuestions.length - 1) {
-      const reaction = currentQuestion?.reaction || "Svar registreret.";
+      const reaction = nextReceiptLine();
       consultation.step += 1;
       consultation.currentQuestionText = questionText(consultationQuestions[consultation.step]);
       return `${reaction}\n…\n\n${consultation.currentQuestionText}`;
@@ -641,7 +716,7 @@ Alt handler om prævention. Alt andet er støj.
 
     consultation.completed = true;
     ensureRecommendation();
-    return `${currentQuestion?.reaction || "Svar registreret."}`;
+    return nextReceiptLine();
   }
 
   function ensureRecommendation() {
@@ -662,37 +737,45 @@ Alt handler om prævention. Alt andet er støj.
     return consultation.currentQuestionText;
   }
 
-  function rejectCurrentInput(reason, systemLine = "") {
+  function isReadyConfirmation(text) {
+    return /^(ja|jo|klar|jeg er klar|start|begynd|okay|ok|ja tak|lad os starte)$/i.test(String(text || "").trim());
+  }
+
+  function nextReceiptLine() {
+    const next = consultation.lastReceiptLine === "Registreret." ? "Data registreret." : "Registreret.";
+    consultation.lastReceiptLine = next;
+    return next;
+  }
+
+  function rejectCurrentInput() {
     consultation.invalidCount += 1;
     if (consultation.invalidCount >= 3) {
       consultation = createConsultation();
-      consultation.currentQuestionText = questionText(consultationQuestions[0]);
-      return `Input afvist.\n• Systemvalidering fejlede\n\nSession nulstillet.\n\n${consultation.currentQuestionText}`;
+      consultationRunning = false;
+      return "Tryk på START for at starte ny session.";
     }
 
-    const redirect = systemLine ? `\n\n${systemLine}` : "";
-    return `Input afvist.\n• ${reason}${redirect}\n\n${repeatCurrentQuestion()}`;
+    return `Data er ugyldig. …\n${repeatCurrentQuestion()}`;
   }
 
   function clarifyCurrentQuestion() {
     consultation.invalidCount += 1;
     if (consultation.invalidCount >= 3) {
       consultation = createConsultation();
-      consultation.currentQuestionText = questionText(consultationQuestions[0]);
-      return `Input afvist.\n• Systemvalidering fejlede\n\nSession nulstillet.\n\n${consultation.currentQuestionText}`;
+      consultationRunning = false;
+      return "Tryk på START for at starte ny session.";
     }
 
     const question = consultationQuestions[consultation.step];
-    const help = question?.help || "Er du i tvivl? Har du brug for hjælp?";
-    return `Svar uklart. Har du brug for hjælp?\n\n${help}\n\n${repeatCurrentQuestion()}`;
+    return `${question?.help || "Okay … Lad mig stille det anderledes."}\n\n${repeatCurrentQuestion()}`;
   }
 
   function explainAndRepeatCurrentQuestion(explanation) {
     consultation.invalidCount += 1;
     if (consultation.invalidCount >= 3) {
       consultation = createConsultation();
-      consultation.currentQuestionText = questionText(consultationQuestions[0]);
-      return `Input afvist.\n• Systemvalidering fejlede\n\nSession nulstillet.\n\n${consultation.currentQuestionText}`;
+      consultationRunning = false;
+      return "Tryk på START for at starte ny session.";
     }
 
     return `${explanation}\n\n${repeatCurrentQuestion()}`;
@@ -749,7 +832,7 @@ Alt handler om prævention. Alt andet er støj.
 
   function isDoubtInput(text) {
     const lower = String(text || "").toLowerCase().trim();
-    return /^(ja|nej|måske|mÃ¥ske|ok|okay|ved ikke|det ved jeg ikke|ingen ide|pas|hvad|gentag|\?)$/.test(lower);
+    return /^(ja|nej|måske|mÃ¥ske|ok|okay|ved ikke|det ved jeg ikke|ingen ide|pas|hvad|gentag|forstår ikke|forstÃ¥r ikke|hjælp|hjÃ¦lp|\?)$/.test(lower);
   }
 
   function isClearlyIrrelevant(text) {
@@ -759,10 +842,10 @@ Alt handler om prævention. Alt andet er støj.
 
   function isUnclearForQuestion(question, text) {
     const lower = String(text || "").toLowerCase().trim();
-    if (/^(det ved jeg ikke|ved ikke|ingen ide|pas|måske|mÃ¥ske|hvad mener du|kan du hjælpe|kan du hjÃ¦lpe|hjælp|hjÃ¦lp)$/.test(lower)) {
+    if (/^(det ved jeg ikke|ved ikke|ingen ide|pas|måske|mÃ¥ske|hvad mener du|kan du hjælpe|kan du hjÃ¦lpe|hjælp|hjÃ¦lp|det er svært|det er svaert|jeg er i tvivl)$/.test(lower)) {
       return true;
     }
-    const vague = /^(sikker|trygt|nemt|let|bedst|normalt|almindeligt|noget godt|det bedste|jeg er usikker)$/;
+    const vague = /^(sikker|trygt|nemt|let|bedst|normalt|almindeligt|noget godt|det bedste|jeg er usikker|det sikreste|bare noget der virker)$/;
     if (!vague.test(lower)) return false;
     return question?.id !== "usage";
   }
@@ -775,10 +858,9 @@ Alt handler om prævention. Alt andet er støj.
     }
 
     const checks = {
-      purpose: /graviditetsforebyggelse|undgå graviditet|undgaa graviditet|graviditet|menstruationsregulering|regulere menstruation|menstruation|blødning|bloeding|kønssygdomme|kønssygdom|smitte|kombination|begge|symptomlindring|smerter|pms|hud|akne|hormonel tilstand|hormoner|pcos|endometriose|beskyttelse|forebygge/,
-      protection: /graviditet|kønssygdomme|kønssygdom|smitte|sexsygdom|sexsygdomme|begge|begge dele|kombination|beskyttelse|kondom|femidom/,
-      usage: /daglig|hver dag|pille|langvarig|lang tid|længere periode|laengere periode|sjældent|sjaeldent|akut|nød|noed|permanent|fast|midlertidig|diskret|nemt|let|huske|operation|spiral|stav|plaster|ring|sprøjte|sproejte/,
-      methodType: /hormonel|hormon|hormoner|ikke-hormonel|ikke hormonel|uden hormon|uden hormoner|akut|nød|noed|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sprøjte|sproejte/,
+      purpose: /graviditet|undgå graviditet|undgaa graviditet|ikke blive gravid|kønssygdom|kønssygdomme|sygdomme|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|begge dele|flere/,
+      usage: /hver dag|daglig|dagligt|huske|pille|flere måneder|flere maaneder|flere år|flere aar|langvarig|lang tid|længe|laenge|uden at gøre noget|uden at goere noget|ikke tænke på det|ikke taenke paa det|løbende|loebende/,
+      methodType: /hormonel|hormon|hormoner|med hormon|ikke-hormonel|ikke hormonel|uden hormon|uden hormoner|ingen hormoner|akut|nød|noed|permanent|for altid|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sprøjte|sproejte|det nemmeste|noget nemt|noget diskret/,
     };
 
     if (checks[question?.id]?.test(lower)) return true;
@@ -786,22 +868,23 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function isContraceptionRelated(text) {
-    return /prævention|praevention|beskyttelse|gravid|graviditet|kønssygdom|koenssygdom|smitte|sex|samleje|kondom|femidom|pessar|pille|p-pille|mini-pille|spiral|kobber|hormon|stav|plaster|ring|sprøjte|sproejte|sterilisation|nødprævention|noedpraevention|menstruation|blødning|bloeding|smerter|pms|akne|hud|pcos|endometriose|bivirkning|daglig|langvarig|akut|permanent/i.test(text);
+    return /prævention|praevention|beskyttelse|gravid|graviditet|baby|børn|boern|kønssygdom|koenssygdom|sygdom|klamydia|smitte|sex|samleje|kondom|femidom|pessar|pille|p-pille|mini-pille|spiral|kobber|hormon|stav|plaster|ring|sprøjte|sproejte|sterilisation|nødprævention|noedpraevention|menstruation|mens|blødning|bloeding|smerter|pms|akne|bumser|hud|pcos|endometriose|bivirkning|daglig|langvarig|akut|permanent|diskret|glemmer|nemt|let/i.test(text);
   }
 
   function chooseRecommendation(answers) {
     const combined = Object.values(answers).join(" ").toLowerCase();
     const purpose = String(answers.purpose || "").toLowerCase();
-    const protection = String(answers.protection || "").toLowerCase();
     const usage = String(answers.usage || "").toLowerCase();
     const methodType = String(answers.methodType || "").toLowerCase();
-    const wantsStiProtection = /kønssygdom|kønssygdomme|begge|begge dele/.test(protection);
-    const wantsPermanent = /permanent/.test(usage) || /permanent/.test(methodType);
-    const wantsAcute = /akut/.test(usage) || /akut/.test(methodType);
-    const wantsNonHormonal = /ikke-hormonel|ikke hormonel/.test(methodType);
-    const wantsHormonal = /hormonel/.test(methodType) && !wantsNonHormonal;
-    const wantsDaily = /daglig/.test(usage);
-    const wantsLong = /langvarig/.test(usage);
+    const wantsStiProtection = /kønssygdom|kønssygdomme|sygdomme|klamydia|smitte|sexsygdom|sexsygdomme/.test(purpose);
+    const wantsCombination = /kombination|begge|begge dele|flere/.test(purpose);
+    const wantsMenstruation = /menstruation|mens|regulere|cyklus/.test(purpose);
+    const wantsPermanent = /permanent|for altid|aldrig have børn|aldrig have boern|færdig med børn|faerdig med boern|operation/.test(usage) || /permanent|for altid|sterilisation/.test(methodType);
+    const wantsAcute = /akut|nød|noed|nu og her|hurtigt|efter sex|i går|i gaar|kondomet sprang|glemte kondom/.test(usage) || /akut|nød|noed/.test(methodType);
+    const wantsNonHormonal = /ikke-hormonel|ikke hormonel|uden hormon|uden hormoner|ingen hormoner|kobber/.test(methodType);
+    const wantsHormonal = /hormonel|hormon|hormoner|med hormon|pille|stav|plaster|ring|sprøjte|sproejte|spiral/.test(methodType) && !wantsNonHormonal;
+    const wantsDaily = /daglig|hver dag|hver morgen|hver aften|pille|huske/.test(usage);
+    const wantsLong = /langvarig|lang tid|længe|laenge|længere periode|laengere periode|sjældent|sjaeldent|ikke tænke på det|ikke taenke paa det|glemmer|dårlig til at huske|daarlig til at huske|diskret|spiral|stav|plaster|ring|sprøjte|sproejte/.test(usage);
     let method = "P-PILLER";
 
     if (wantsStiProtection) {
@@ -812,10 +895,22 @@ Alt handler om prævention. Alt andet er støj.
       method = "STERILISATION (KVINDE)";
     } else if (wantsAcute) {
       method = "NØDPRÆVENTION";
+    } else if (wantsCombination && wantsHormonal && wantsLong) {
+      method = "HORMONSPIRAL + KONDOM";
+    } else if (wantsCombination && wantsNonHormonal) {
+      method = "KOBBERSPIRAL + KONDOM";
+    } else if (wantsMenstruation && wantsHormonal && wantsLong) {
+      method = "HORMONSPIRAL";
+    } else if (wantsMenstruation && wantsHormonal && wantsDaily) {
+      method = "P-PILLER";
     } else if (wantsHormonal && wantsDaily) {
       method = /menstruation|smerter|pms|akne|hud|pcos|endometriose/.test(purpose) ? "P-PILLER" : "P-PILLER";
     } else if (wantsHormonal && wantsLong) {
       method = /hud|akne/.test(purpose) ? "P-STAV" : "HORMONSPIRAL";
+    } else if (wantsNonHormonal && wantsLong) {
+      method = "KOBBERSPIRAL";
+    } else if (wantsNonHormonal && wantsDaily) {
+      method = "KONDOM + SÆDDRÆBENDE MIDDEL";
     } else if (wantsNonHormonal) {
       method = "KOBBERSPIRAL";
     }
@@ -830,7 +925,7 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function finalRecommendationText(recommendation, answers) {
-    return `Tildeling gennemført.\n\n${clinicalOutputText(recommendation, answers)}\n\n${inequalitySystemNote()}\n\nSystemet genererer kvittering...`;
+    return `"Tildeling gennemført."\n\n${clinicalOutputText(recommendation, answers)}`;
   }
 
   function inequalitySystemNote() {
@@ -867,16 +962,25 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function effectivenessText(method) {
+    if (method === "HORMONSPIRAL" || method === "P-STAV" || method === "KOBBERSPIRAL" || method === "KOBBERSPIRAL + KONDOM" || method === "HORMONSPIRAL + KONDOM") {
+      return "99,9% ved korrekt brug.";
+    }
+    if (method === "P-PILLER" || method === "MINI-PILLER" || method === "P-RING" || method === "P-PLASTER" || method === "P-SPRØJTE") {
+      return "99% ved korrekt brug.";
+    }
     if (method === "KONDOM" || method === "FEMIDOM" || method === "PESSAR") {
-      return "Afhænger af korrekt brug. Ikke en garanti.";
+      return method === "KONDOM" ? "98% ved korrekt brug." : "95% ved korrekt brug.";
+    }
+    if (method === "KONDOM + SÆDDRÆBENDE MIDDEL") {
+      return "Afhænger af korrekt brug.";
     }
     if (method === "NØDPRÆVENTION") {
-      return "Akut metode. Effekt varierer.";
+      return "85-95% hvis taget inden 72 timer.";
     }
     if (method.includes("STERILISATION")) {
-      return "Permanent metode. Effekt vurderes som høj.";
+      return ">99,9%.";
     }
-    return "Typisk høj ved korrekt brug. Ikke en garanti.";
+    return "Afhænger af korrekt brug.";
   }
 
   function userGenderText(ansvar) {
@@ -889,10 +993,11 @@ Alt handler om prævention. Alt andet er støj.
     return [
       safeRecommendation.method,
       receipt.beskytter,
+      effectivenessText(safeRecommendation.method),
       receipt.anvendelse,
-      receipt.heading,
+      userGenderText(receipt.ansvar),
       receipt.effects.join("~"),
-      receipt.ansvar,
+      receiptFooterText(),
     ];
   }
 
@@ -901,31 +1006,23 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function receiptText(recommendation, answers) {
-    const safeRecommendation = recommendation || chooseRecommendation(answers || {});
-    const receipt = safeRecommendation.receipt || receiptTemplates["P-PILLER"];
-    const lines = [
-      "TILDELT PRÆVENTION:",
-      safeRecommendation.method,
-      "",
-      "BESKYTTER MOD:",
-      receipt.beskytter,
-      "",
-      "ANVENDELSE:",
-      receipt.anvendelse,
-      "",
-      receipt.heading,
-      ...receipt.effects.map((effect) => `• ${effect}`),
-      "",
-      "ANSVAR:",
-      receipt.ansvar,
-      "",
-      "---",
-      "",
-      "VIDSTE DU AT…?",
-      "Der findes over 12 præventionsformer til kvinder,",
-      "men kun 2 til mænd.",
-    ];
-    return lines.join("\n");
+    return `${clinicalOutputText(recommendation, answers)}\n\n---\n\n${receiptFooterText()}`;
+  }
+
+  function receiptFooterText() {
+    if (consultation.lastReceiptVariant === "B") {
+      return (
+        "Vidste du, at den første hormonelle prævention til mænd blev testet i 1990'erne?\n" +
+        "Forsøget blev stoppet på grund af bivirkninger.\n" +
+        "De samme bivirkninger accepteres i dag i prævention til kvinder."
+      );
+    }
+    return (
+      "Vidste du, at de fleste præventionsmetoder er udviklet til kvinder?\n" +
+      "Mænd har kun 2 muligheder, mens kvinder har over 12.\n" +
+      "Det betyder, at ansvaret for at forhindre graviditet primært ligger hos kvinder —\n" +
+      "og i deres kroppe, der bliver påvirket både hormonelt og fysisk."
+    );
   }
 
   function shortAnswer(value) {
@@ -935,8 +1032,42 @@ Alt handler om prævention. Alt andet er støj.
 
   function receiptSafe(value) {
     return String(value || "-")
+      .replace(/æ/g, "ae")
+      .replace(/ø/g, "oe")
+      .replace(/å/g, "aa")
+      .replace(/Æ/g, "AE")
+      .replace(/Ø/g, "OE")
+      .replace(/Å/g, "AA")
+      .replace(/é/g, "e")
+      .replace(/É/g, "E")
+      .replace(/[’‘]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[–—]/g, "-")
+      .replace(/…/g, "...")
+      .replace(/•/g, "-")
       .replace(/[|\r\n]/g, " ")
       .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function receiptSafeForPrinter(value) {
+    return String(value || "-")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\u00e6/g, "ae")
+      .replace(/\u00f8/g, "oe")
+      .replace(/\u00e5/g, "aa")
+      .replace(/\u00c6/g, "AE")
+      .replace(/\u00d8/g, "OE")
+      .replace(/\u00c5/g, "AA")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/\u2026/g, "...")
+      .replace(/\u2022/g, "-")
+      .replace(/[|\r\n]/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/[^\x20-\x7E]/g, "")
       .trim();
   }
 
@@ -1031,6 +1162,7 @@ Alt handler om prævention. Alt andet er støj.
   async function speak(text) {
     speechRunId += 1;
     const runId = speechRunId;
+    const startedAt = Date.now();
     stopCurrentAudio();
     stopMouthAudio();
     window.speechSynthesis?.cancel?.();
@@ -1043,8 +1175,26 @@ Alt handler om prævention. Alt andet er støj.
         return speakWithBrowser(text, runId);
       });
     } finally {
+      if (runId === speechRunId && Date.now() - startedAt < 1200) {
+        await holdSpeakingFallback(text, runId);
+      }
       if (runId === speechRunId) resumeRecognitionAfterSpeech();
     }
+  }
+
+  async function holdSpeakingFallback(text, runId) {
+    const duration = estimateSpeechDuration(text);
+    setState("speaking");
+    startMouthIdle();
+    await sleep(duration);
+    if (runId !== speechRunId) return;
+    stopMouthIdle();
+    sendMouth(0);
+  }
+
+  function estimateSpeechDuration(text) {
+    const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+    return Math.max(2400, Math.min(9000, 900 + words * 360));
   }
 
   function suspendRecognitionWhileSpeaking() {
@@ -1071,7 +1221,7 @@ Alt handler om prævention. Alt andet er støj.
   function isRobotEcho(text) {
     const normalized = String(text || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
     if (!normalized) return true;
-    return /^(robotlægen|robotlaegen|registreret|svar registreret|input afvist|angiv|vælg|vaelg|analyserer data|tildeling gennemført|tildeling gennemfoert|systemnote|præventionsmuligheder|praeventionsmuligheder|systemet genererer|session afsluttet|her er din kvittering)/i.test(normalized);
+    return /^(robotlægen|robotlaegen|velkommen|er du klar til at starte session|registreret|data registreret|svar registreret|input afvist|angiv|vælg|vaelg|analyserer data|system beregner|præventionsformer|praeventionsformer|beregning fortsætter|beregning fortsaetter|tildeling gennemført|tildeling gennemfoert|systemnote|præventionsmuligheder|praeventionsmuligheder|din kvittering genereres|systemet genererer|session afsluttet|her er din kvittering)/i.test(normalized);
   }
 
   async function speakWithOpenAI(text, runId) {
@@ -1095,23 +1245,43 @@ Alt handler om prævention. Alt andet er støj.
     const audio = new Audio(audioUrl);
     currentAudio = audio;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let playbackStarted = false;
       const finish = () => {
         if (runId !== speechRunId) return resolve();
         stopMouthAudio();
+        stopMouthIdle();
         sendMouth(0);
         ignoreSpeechUntil = Date.now() + 1400;
         URL.revokeObjectURL(audioUrl);
         if (currentAudio === audio) currentAudio = null;
         resolve();
       };
+      const fail = (error) => {
+        stopMouthAudio();
+        stopMouthIdle();
+        sendMouth(0);
+        URL.revokeObjectURL(audioUrl);
+        if (currentAudio === audio) currentAudio = null;
+        reject(error instanceof Error ? error : new Error("OpenAI speech playback failed."));
+      };
 
       audio.onplaying = () => {
-        if (runId === speechRunId) startMouthAudio(audio);
+        playbackStarted = true;
+        if (runId === speechRunId) {
+          setState("speaking");
+          startMouthIdle();
+          startMouthAudio(audio);
+        }
       };
       audio.onended = finish;
-      audio.onerror = finish;
-      audio.play().catch(finish);
+      audio.onerror = () => fail(new Error("OpenAI speech audio could not play."));
+      audio.play().catch(fail);
+      window.setTimeout(() => {
+        if (runId === speechRunId && currentAudio === audio && !playbackStarted) {
+          fail(new Error("OpenAI speech playback did not start."));
+        }
+      }, 3500);
     });
   }
 
@@ -1125,8 +1295,12 @@ Alt handler om prævention. Alt andet er støj.
 
   function speakWithBrowser(text, runId) {
     return new Promise((resolve) => {
-      if (!window.speechSynthesis) return resolve();
+      if (!window.speechSynthesis) {
+        holdSpeakingFallback(text, runId).then(resolve);
+        return;
+      }
       const utterance = new SpeechSynthesisUtterance(text);
+      let started = false;
       utterance.lang = "da-DK";
       utterance.voice = selectDanishVoice();
       utterance.rate = 0.9;
@@ -1141,12 +1315,22 @@ Alt handler om prævention. Alt andet er støj.
       };
       utterance.onboundary = () => pulseMouth();
       utterance.onstart = () => {
+        started = true;
         setState("speaking");
         startMouthIdle();
       };
       utterance.onend = stopMouth;
       utterance.onerror = stopMouth;
       window.speechSynthesis.speak(utterance);
+      window.setTimeout(() => {
+        if (runId !== speechRunId || started) return;
+        setState("speaking");
+        startMouthIdle();
+      }, 500);
+      window.setTimeout(() => {
+        if (runId !== speechRunId || started) return;
+        stopMouth();
+      }, estimateSpeechDuration(text));
     });
   }
 
@@ -1163,15 +1347,15 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function pulseMouth() {
-    sendMouth(62 + Math.round(Math.random() * 20));
+    sendMouth(78 + Math.round(Math.random() * 20));
     if (mouthCloseTimer) window.clearTimeout(mouthCloseTimer);
-    mouthCloseTimer = window.setTimeout(() => sendMouth(12), 90);
+    mouthCloseTimer = window.setTimeout(() => sendMouth(16), 95);
   }
 
   function startMouthIdle() {
     stopMouthIdle();
     mouthIdleTimer = window.setInterval(() => {
-      sendMouth(24 + Math.round(Math.random() * 24));
+      sendMouth(38 + Math.round(Math.random() * 42));
     }, 170);
   }
 
@@ -1200,7 +1384,7 @@ Alt handler om prævention. Alt andet er støj.
         const micro = Math.sin(elapsed * Math.PI * 15.0 + 1.7);
         const pauseGate = Math.sin(elapsed * Math.PI * 1.15) > -0.72 ? 1 : 0.24;
         const open = Math.max(0, phrase * 0.55 + syllable * 0.32 + micro * 0.08);
-        const amount = Math.round(12 + open * pauseGate * 70);
+        const amount = Math.round(20 + open * pauseGate * 78);
         sendMouth(amount);
       }, 70);
     };
@@ -1244,8 +1428,8 @@ Alt handler om prævention. Alt andet er støj.
 
   async function sendReceipt() {
     if (!serialWriter) return false;
-    const fields = Array.isArray(lastReceipt) ? lastReceipt : ["Test-kvittering", "-", "-", "-", "-", "-"];
-    const line = `PRINT|${fields.map(receiptSafe).join("|")}`;
+    const fields = Array.isArray(lastReceipt) ? lastReceipt : ["Test-kvittering", "-", "-", "-", "-", "-", "-"];
+    const line = `PRINT|${fields.map(receiptSafeForPrinter).join("|")}`;
     await serialWriter.write(new TextEncoder().encode(`${line}\n`));
     return true;
   }
@@ -1257,7 +1441,21 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   async function finishConsultationAndReturnToStart(chat, status) {
-    const goodbye = "Her er din kvittering. Husk at tage den med dig. Session afsluttet.";
+    const generating = "Din kvittering genereres. … Et øjeblik.";
+    msg(chat, "doctor", generating);
+    messages.push({ role: "assistant", text: generating });
+    messages = messages.slice(-12);
+    await speak(generating);
+    await sleep(1800);
+    await printReceipt(chat);
+
+    const receiptReady = "Her er din kvittering. Husk at tage den med dig.";
+    msg(chat, "doctor", receiptReady);
+    messages.push({ role: "assistant", text: receiptReady });
+    messages = messages.slice(-12);
+    await speak(receiptReady);
+
+    const goodbye = "Session afsluttet.";
     msg(chat, "doctor", goodbye);
     messages.push({ role: "assistant", text: goodbye });
     messages = messages.slice(-12);
@@ -1308,7 +1506,7 @@ Alt handler om prævention. Alt andet er støj.
     const thinking = state === "processing";
     const listeningNow = state === "listening";
     const idleOrReady = state === "idle" || state === "ready";
-    const headX = w * 0.5 + Math.sin(t * (thinking ? 0.72 : idleOrReady ? 0.34 : 0.8)) * (thinking ? 34 : idleOrReady ? 22 : 10) * scale;
+    const headX = w * 0.5 + Math.sin(t * (thinking ? 0.9 : idleOrReady ? 0.42 : 0.9)) * (thinking ? 56 : idleOrReady ? 34 : 18) * scale;
     const headY = h * 0.47;
     const headW = 250 * scale;
     const headH = 310 * scale;
@@ -1318,12 +1516,13 @@ Alt handler om prævention. Alt andet er støj.
     roundRect(ctx, -headW / 2, -headH / 2, headW, headH, 24 * scale, "#d2d6c7", "#4c5446");
     roundRect(ctx, -headW * 0.36, -86 * scale, headW * 0.72, 84 * scale, 12 * scale, "#1e221c");
     const eyeX = Math.sin(t * (speaking ? 3 : idleOrReady ? 0.62 : 1.4)) * (idleOrReady ? 7 : 10) * scale;
-    const scanY = Math.sin(t * 2.15) * 20 * scale;
+    const scanPhase = (t * 0.75) % 1;
+    const scanY = (-30 + scanPhase * 60) * scale;
     const eyeY = thinking ? scanY : (listeningNow ? -7 : Math.sin(t * (idleOrReady ? 0.48 : 0.9)) * (idleOrReady ? 3 : 4)) * scale;
     eye(-48 * scale + eyeX, -48 * scale + eyeY, scale);
     eye(48 * scale + eyeX, -48 * scale + eyeY, scale);
-    const mouth = (speaking ? 18 + Math.abs(Math.sin(t * 12)) * 38 : 10) * scale;
-    roundRect(ctx, -46 * scale, 78 * scale - mouth / 2, 92 * scale, mouth, 9 * scale, "#2c2622", "#3c2824");
+    const mouth = (speaking ? 24 + Math.abs(Math.sin(t * 13.5)) * 54 : 10) * scale;
+    roundRect(ctx, -52 * scale, 78 * scale - mouth / 2, 104 * scale, mouth, 9 * scale, "#2c2622", "#3c2824");
     ctx.restore();
 
     ctx.fillStyle = "#f3f1e8";
