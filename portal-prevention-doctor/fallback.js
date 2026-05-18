@@ -1208,8 +1208,8 @@ Alt handler om prævention. Alt andet er støj.
     activeSpeechHandler = onText;
     listening = true;
     setState("listening");
-    const runId = ++mediaListenRunId;
     if (mediaListening) return;
+    const runId = ++mediaListenRunId;
 
     try {
       if (!mediaStream) {
