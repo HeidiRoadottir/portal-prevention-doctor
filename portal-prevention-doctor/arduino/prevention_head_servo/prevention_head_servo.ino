@@ -22,7 +22,7 @@
     Thermal printer RX    -> pin 11 (Arduino-to-printer)
 
   Receipt printer:
-    Browser sends PRINT|method|protects|use|sideEffectHeading|sideEffects|responsibility
+    Browser sends PRINT|method|protects|effectiveness|use|gender|sideEffects|footer
     after the consultation is completed.
 */
 
@@ -35,7 +35,7 @@
 #endif
 
 const unsigned long SERIAL_BAUD = 115200;
-const unsigned long PRINTER_BAUD = 19200;
+const unsigned long PRINTER_BAUD = 9600;
 
 const uint8_t BUTTON_PIN = 2;
 const uint8_t SERVO_EYE_LR_PIN = 3;
@@ -49,20 +49,20 @@ const int EYE_LR_MIN = 45;
 const int EYE_LR_CENTER = 90;
 const int EYE_LR_MAX = 135;
 
-const int EYE_UD_MIN = 72;
+const int EYE_UD_MIN = 55;
 const int EYE_UD_CENTER = 92;
-const int EYE_UD_MAX = 112;
+const int EYE_UD_MAX = 130;
 
-const int HEAD_YAW_MIN = 45;
+const int HEAD_YAW_MIN = 35;
 const int HEAD_YAW_CENTER = 75;
-const int HEAD_YAW_MAX = 105;
+const int HEAD_YAW_MAX = 115;
 
-const int MOUTH_CLOSED = 45;
-const int MOUTH_MID = 58;
-const int MOUTH_OPEN = 68;
+const int MOUTH_CLOSED = 42;
+const int MOUTH_MID = 68;
+const int MOUTH_OPEN = 95;
 
-const float SERVO_SMOOTHING = 0.055f;
-const float MOUTH_SMOOTHING = 0.24f;
+const float SERVO_SMOOTHING = 0.07f;
+const float MOUTH_SMOOTHING = 0.34f;
 const unsigned long BOOT_SETTLE_MS = 1400;
 const unsigned long MANUAL_MOUTH_HOLD_MS = 420;
 const unsigned long BUTTON_DEBOUNCE_MS = 45;
@@ -209,32 +209,32 @@ void resetPrinter() {
 
 void printReceipt(const String &line) {
 #if RECEIPT_PRINTER_AVAILABLE
-  String fields[6];
-  splitReceiptFields(line, fields, 6);
+  String fields[7];
+  splitReceiptFields(line, fields, 7);
 
   resetPrinter();
   printerSerial.println();
   printerSerial.println("TILDELT PRAEVENTION:");
-  printerSerial.println(printerText(fields[0]));
+  printerSerial.println(printerAscii(fields[0]));
   printerSerial.println();
   printerSerial.println("BESKYTTER MOD:");
-  printerSerial.println(printerText(fields[1]));
+  printerSerial.println(printerAscii(fields[1]));
+  printerSerial.println();
+  printerSerial.println("EFFEKTIVITET:");
+  printerSerial.println(printerAscii(fields[2]));
   printerSerial.println();
   printerSerial.println("ANVENDELSE:");
-  printerSerial.println(printerText(fields[2]));
+  printerSerial.println(printerAscii(fields[3]));
   printerSerial.println();
-  printerSerial.println(printerText(fields[3]));
-  printReceiptEffects(fields[4]);
+  printerSerial.println("BRUGERKOEN:");
+  printerSerial.println(printerAscii(fields[4]));
   printerSerial.println();
-  printerSerial.println("ANSVAR:");
-  printerSerial.println(printerText(fields[5]));
+  printerSerial.println("REGISTREREDE BIVIRKNINGER:");
+  printReceiptEffects(fields[5]);
   printerSerial.println();
   printerSerial.println("---");
   printerSerial.println();
-  printerSerial.println("VIDSTE DU AT...?");
-  printerSerial.println("Der findes over 12");
-  printerSerial.println("praeventionsformer til kvinder,");
-  printerSerial.println("men kun 2 til maend.");
+  printReceiptFooter(fields[6]);
   printerSerial.println();
   printerSerial.println();
   printerSerial.println();
@@ -260,6 +260,20 @@ String printerText(String value) {
   return value;
 }
 
+String printerAscii(String value) {
+  value.trim();
+  String clean = "";
+  for (unsigned int i = 0; i < value.length(); i += 1) {
+    const char ch = value.charAt(i);
+    if (ch >= 32 && ch <= 126) {
+      clean += ch;
+    }
+  }
+  clean.trim();
+  if (!clean.length()) return "-";
+  return clean;
+}
+
 void printReceiptEffects(const String &effects) {
   int start = 0;
   while (start <= effects.length()) {
@@ -268,10 +282,26 @@ void printReceiptEffects(const String &effects) {
     effect.trim();
     if (effect.length()) {
       printerSerial.print("- ");
-      printerSerial.println(printerText(effect));
+      printerSerial.println(printerAscii(effect));
     }
     if (divider < 0) break;
     start = divider + 1;
+  }
+}
+
+void printReceiptFooter(const String &footer) {
+  String text = printerAscii(footer);
+  int start = 0;
+  while (start < text.length()) {
+    int end = start + 32;
+    if (end >= text.length()) {
+      printerSerial.println(text.substring(start));
+      break;
+    }
+    int space = text.lastIndexOf(' ', end);
+    if (space <= start) space = end;
+    printerSerial.println(text.substring(start, space));
+    start = space + 1;
   }
 }
 
@@ -322,11 +352,15 @@ void updateGazeTargets() {
   nextGazeShiftDelayMs = pickGazeDelayForState();
 
   if (currentState == "processing") {
-    eyeLRTarget = EYE_LR_CENTER + (int)round(sinf(now / 900.0f) * 5.0f);
-    eyeUDTarget = EYE_UD_CENTER + (int)round(sinf(now / 360.0f) * 14.0f);
+    eyeLRTarget = EYE_LR_CENTER;
+    const float scanPhase = (float)(now % 1600UL) / 1600.0f;
+    eyeUDTarget = EYE_UD_MIN + (int)round(scanPhase * (EYE_UD_MAX - EYE_UD_MIN));
   } else if (currentState == "speaking") {
     eyeLRTarget = randomInt(EYE_LR_CENTER - 12, EYE_LR_CENTER + 12);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 3, EYE_UD_CENTER + 3);
+  } else if (currentState == "waiting_for_reply") {
+    eyeLRTarget = randomInt(EYE_LR_CENTER - 4, EYE_LR_CENTER + 4);
+    eyeUDTarget = randomInt(EYE_UD_CENTER - 2, EYE_UD_CENTER + 2);
   } else {
     eyeLRTarget = randomInt(EYE_LR_CENTER - 14, EYE_LR_CENTER + 14);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 4, EYE_UD_CENTER + 4);
@@ -343,15 +377,15 @@ void updateHeadTargets() {
   nextHeadShiftDelayMs = pickHeadDelayForState();
 
   if (currentState == "idle" || currentState == "ready") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 7, HEAD_YAW_CENTER + 7);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 15, HEAD_YAW_CENTER + 15);
   } else if (currentState == "listening") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 4, HEAD_YAW_CENTER + 4);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 8, HEAD_YAW_CENTER + 8);
   } else if (currentState == "processing") {
-    headYawTarget = HEAD_YAW_CENTER + (int)round(sinf(now / 1250.0f) * 16.0f);
+    headYawTarget = HEAD_YAW_CENTER + (int)round(sinf(now / 820.0f) * 26.0f);
   } else if (currentState == "speaking") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 5, HEAD_YAW_CENTER + 5);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 11, HEAD_YAW_CENTER + 11);
   } else if (currentState == "waiting_for_reply") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 5, HEAD_YAW_CENTER + 5);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 3, HEAD_YAW_CENTER + 3);
   }
 }
 
@@ -433,17 +467,17 @@ bool shouldRoamHead() {
 
 unsigned long pickGazeDelayForState() {
   if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(1700, 2800);
-  if (currentState == "processing") return (unsigned long)randomInt(700, 1400);
+  if (currentState == "processing") return (unsigned long)randomInt(90, 140);
   if (currentState == "speaking") return (unsigned long)randomInt(550, 1050);
-  if (currentState == "waiting_for_reply") return (unsigned long)randomInt(900, 1500);
+  if (currentState == "waiting_for_reply") return (unsigned long)randomInt(1800, 2800);
   return (unsigned long)randomInt(900, 1700);
 }
 
 unsigned long pickHeadDelayForState() {
-  if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(2600, 4200);
+  if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(1400, 2400);
   if (currentState == "processing") return (unsigned long)randomInt(180, 260);
-  if (currentState == "speaking") return (unsigned long)randomInt(1300, 2100);
-  return (unsigned long)randomInt(1800, 3200);
+  if (currentState == "speaking") return (unsigned long)randomInt(700, 1300);
+  return (unsigned long)randomInt(1100, 2200);
 }
 
 void scheduleGazeShiftFromNow() {
