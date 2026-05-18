@@ -744,7 +744,16 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function isReadyConfirmation(text) {
-    return /^(ja|jo|klar|jeg er klar|start|begynd|okay|ok|ja tak|lad os starte)$/i.test(String(text || "").trim());
+    const normalized = normalizeSpokenText(text);
+    return /^(ja|jo|klar|jeg er klar|start|begynd|begynde|okay|ok|ja tak|lad os starte|lad os begynde)$/i.test(normalized);
+  }
+
+  function normalizeSpokenText(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function nextReceiptLine() {
@@ -1224,9 +1233,9 @@ Alt handler om prævention. Alt andet er støj.
     if (transcript.length < 2) return false;
     if (isRobotEcho(transcript)) return false;
 
-    const normalized = transcript.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    const normalized = normalizeSpokenText(transcript);
     const now = Date.now();
-    if (normalized && normalized === lastMediaTranscript && now - lastMediaTranscriptAt < 9000) return false;
+    if (normalized && normalized === lastMediaTranscript && now - lastMediaTranscriptAt < 3500) return false;
 
     lastMediaTranscript = normalized;
     lastMediaTranscriptAt = now;
