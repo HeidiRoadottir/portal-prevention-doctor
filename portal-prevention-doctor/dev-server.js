@@ -118,6 +118,47 @@ http
       return;
     }
 
+    if (req.url === "/api/transcribe" && req.method === "POST") {
+      try {
+        if (!runtimeApiKey) {
+          sendJson(res, { ok: false, error: "Missing local API key. Paste it in the app and press Gem." }, 400);
+          return;
+        }
+
+        const audio = await readRaw(req, 12 * 1024 * 1024);
+        if (!audio.length) {
+          sendJson(res, { ok: false, error: "Missing audio." }, 400);
+          return;
+        }
+
+        const contentType = String(req.headers["content-type"] || "audio/webm");
+        const form = new FormData();
+        form.append("model", process.env.PORTAL_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe");
+        form.append("language", "da");
+        form.append("file", new Blob([audio], { type: contentType }), "speech.webm");
+
+        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${runtimeApiKey}`,
+          },
+          body: form,
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = data?.error?.message || `OpenAI transcription HTTP ${response.status}`;
+          sendJson(res, { ok: false, error: message }, response.status);
+          return;
+        }
+
+        sendJson(res, { ok: true, text: String(data.text || "").trim(), raw: data });
+      } catch (error) {
+        sendJson(res, { ok: false, error: error.message || String(error) }, 500);
+      }
+      return;
+    }
+
     let urlPath = decodeURIComponent(String(req.url || "/").split("?")[0]);
     if (urlPath.endsWith("/")) urlPath += "index.html";
     urlPath = path.normalize(urlPath).replace(/^[/\\]+/, "");
@@ -165,6 +206,24 @@ function readJson(req) {
         reject(error);
       }
     });
+    req.on("error", reject);
+  });
+}
+
+function readRaw(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error("Request body too large."));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }

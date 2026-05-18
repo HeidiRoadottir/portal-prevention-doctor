@@ -87,6 +87,10 @@ Alt handler om prævention. Alt andet er støj.
   let listening = false;
   let recognitionSuspended = false;
   let activeSpeechHandler = null;
+  let mediaStream = null;
+  let mediaListening = false;
+  let mediaListenRunId = 0;
+  let mediaTranscriptBusy = false;
   let consultationRunning = false;
   let state = "idle";
   let apiKey = "";
@@ -1124,6 +1128,9 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function startListening(onText) {
+    startMediaListening(onText);
+    return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
     activeSpeechHandler = onText;
@@ -1154,9 +1161,97 @@ Alt handler om prævention. Alt andet er støj.
     listening = false;
     recognitionSuspended = false;
     activeSpeechHandler = null;
+    stopMediaListening();
     if (recognition) recognition.stop();
     recognition = null;
     setState("idle");
+  }
+
+  async function startMediaListening(onText) {
+    activeSpeechHandler = onText;
+    listening = true;
+    setState("listening");
+    const runId = ++mediaListenRunId;
+    if (mediaListening) return;
+
+    try {
+      if (!mediaStream) {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      }
+      mediaListening = true;
+      mediaTranscriptionLoop(onText, runId);
+    } catch (error) {
+      mediaListening = false;
+      system(document.querySelector(".pd-chat"), `Mikrofon-fejl: ${error.message || error}`);
+    }
+  }
+
+  function stopMediaListening() {
+    mediaListening = false;
+    mediaListenRunId += 1;
+    mediaTranscriptBusy = false;
+  }
+
+  async function mediaTranscriptionLoop(onText, runId) {
+    while (mediaListening && runId === mediaListenRunId) {
+      if (recognitionSuspended || state !== "listening" || mediaTranscriptBusy) {
+        await sleep(250);
+        continue;
+      }
+
+      try {
+        const blob = await recordAudioChunk(3600);
+        if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
+        const text = await transcribeAudio(blob);
+        if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
+        if (text && !isRobotEcho(text)) onText(text);
+      } catch (error) {
+        await sleep(800);
+      }
+    }
+  }
+
+  function recordAudioChunk(durationMs) {
+    return new Promise((resolve, reject) => {
+      if (!mediaStream) return reject(new Error("Mikrofon er ikke klar."));
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(mediaStream, { mimeType });
+      const chunks = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onerror = () => reject(new Error("Mikrofonoptagelse fejlede."));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      recorder.start();
+      window.setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, durationMs);
+    });
+  }
+
+  async function transcribeAudio(blob) {
+    if (!blob || blob.size < 1200) return "";
+    mediaTranscriptBusy = true;
+    try {
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": blob.type || "audio/webm",
+        },
+        body: blob,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `Transcription HTTP ${response.status}`);
+      return String(payload.text || "").trim();
+    } finally {
+      mediaTranscriptBusy = false;
+    }
   }
 
   async function speak(text) {
