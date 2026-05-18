@@ -91,6 +91,8 @@ Alt handler om prævention. Alt andet er støj.
   let mediaListening = false;
   let mediaListenRunId = 0;
   let mediaTranscriptBusy = false;
+  let lastMediaTranscript = "";
+  let lastMediaTranscriptAt = 0;
   let consultationRunning = false;
   let state = "idle";
   let apiKey = "";
@@ -1206,15 +1208,29 @@ Alt handler om prævention. Alt andet er støj.
       }
 
       try {
-        const blob = await recordAudioChunk(3600);
+        const blob = await recordAudioChunk(5200);
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
         const text = await transcribeAudio(blob);
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
-        if (text && !isRobotEcho(text)) onText(text);
+        if (shouldUseTranscript(text)) onText(text);
       } catch (error) {
         await sleep(800);
       }
     }
+  }
+
+  function shouldUseTranscript(text) {
+    const transcript = String(text || "").trim();
+    if (transcript.length < 2) return false;
+    if (isRobotEcho(transcript)) return false;
+
+    const normalized = transcript.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    const now = Date.now();
+    if (normalized && normalized === lastMediaTranscript && now - lastMediaTranscriptAt < 9000) return false;
+
+    lastMediaTranscript = normalized;
+    lastMediaTranscriptAt = now;
+    return true;
   }
 
   function recordAudioChunk(durationMs) {

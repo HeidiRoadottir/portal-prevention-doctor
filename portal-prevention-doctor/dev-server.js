@@ -133,8 +133,12 @@ http
 
         const contentType = String(req.headers["content-type"] || "audio/webm");
         const form = new FormData();
-        form.append("model", process.env.PORTAL_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe");
+        form.append("model", process.env.PORTAL_TRANSCRIBE_MODEL || "gpt-4o-transcribe");
         form.append("language", "da");
+        form.append(
+          "prompt",
+          "Transskriber dansk tale fra en Raspberry Pi-installation. Brug dansk stavning. Emnet er prævention, kondom, graviditet, kønssygdomme, hormoner, spiral, p-piller og konsultation. Returner kun det brugeren siger."
+        );
         form.append("file", new Blob([audio], { type: contentType }), "speech.webm");
 
         const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
