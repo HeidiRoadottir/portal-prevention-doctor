@@ -803,7 +803,7 @@ Alt handler om prævention. Alt andet er støj.
   function unclearAnswerReply() {
     consultation.invalidCount += 1;
     const question = consultationQuestions[consultation.step];
-    return `${relevantFact(question)}\n\n${repeatCurrentQuestion()}`;
+    return `${question?.help || "Okay ... Lad mig specificere."}\n\n${repeatCurrentQuestion()}`;
   }
 
   function relevantFact(question) {
@@ -1038,6 +1038,29 @@ Alt handler om prævention. Alt andet er støj.
     if (checks[question?.id]?.test(lower)) return true;
     if (isContraceptionRelated(lower)) return true;
     return lower.length >= 3;
+  }
+
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    if (/(ved ikke|ved det ikke|vidste ikke|det ved jeg ikke|det vidste jeg ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
+    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
+  }
+
+  function answerMatchesQuestion(question, text) {
+    const lower = normalizeSpokenText(text);
+    if (!lower || isHelpOrDoubtInput(lower)) return false;
+
+    const checks = {
+      purpose: /graviditet|undgaa graviditet|undgå graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
+      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende|glemmer|husker/,
+      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
+    };
+
+    if (checks[question?.id]?.test(lower)) return true;
+    if (isContraceptionRelated(lower)) return true;
+
+    // Accept normal spoken answers, but not pure uncertainty/filler.
+    return lower.split(/\s+/).length >= 3 && !/(bla bla|whatever|ligeglad|aner ikke)/.test(lower);
   }
 
   function chooseRecommendation(answers) {
