@@ -1140,7 +1140,7 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function finalRecommendationText(recommendation, answers) {
-    return `Robotlægen: "Tildeling gennemført."\n\n${clinicalOutputText(recommendation, answers)}`;
+    return `"Tildeling gennemført."\n\n${clinicalOutputText(recommendation, answers)}`;
   }
 
   function inequalitySystemNote() {
