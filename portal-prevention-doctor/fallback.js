@@ -809,23 +809,23 @@ Alt handler om prævention. Alt andet er støj.
   function relevantFact(question) {
     const facts = {
       purpose: [
-        "Kort fakta: Kondom er den eneste af de almindelige metoder her, der også kan beskytte mod flere kønssygdomme.",
-        "Kort fakta: Prævention kan handle om graviditet, smitte, blødning eller flere ting på samme tid. Systemet kræver bare en retning.",
-        "Kort fakta: Hvis både graviditet og kønssygdomme er relevante, ender svaret ofte med kondom alene eller kondom sammen med en anden metode.",
+        "Svarhjælp: Hvis du er i tvivl, kan du vælge mellem fire formål: undgå graviditet, beskytte mod kønssygdomme, regulere menstruation, eller en kombination.",
+        "Svarhjælp: Tænk på hvad der er vigtigst lige nu. Er det graviditet, smitte, menstruation, eller flere ting samtidig?",
+        "Svarhjælp: Hvis både graviditet og kønssygdomme betyder noget, kan du sige kombination. Systemet kan godt registrere mere end én bekymring.",
       ],
       usage: [
-        "Kort fakta: Daglige metoder kræver hukommelse. Langtidsvirkende metoder flytter ansvaret fra hver dag til en klinisk indsættelse.",
-        "Kort fakta: P-piller kræver gentagelse. Spiral og p-stav virker i længere tid uden daglig handling.",
-        "Kort fakta: Jo mere en metode kræver i øjeblikket, jo mere kan glemsel og partneradfærd påvirke resultatet.",
+        "Svarhjælp: Du kan svare med daglig metode, hvis du godt kan huske noget hver dag. Du kan svare langtidsvirkende, hvis du hellere vil slippe for daglig handling.",
+        "Svarhjælp: Tænk på om du vil have kontrol hver dag, eller om metoden helst skal passe sig selv i flere måneder eller år.",
+        "Svarhjælp: Hvis du ofte glemmer ting, er det relevant at sige det. Systemet registrerer hukommelse som en del af ansvarsfordelingen.",
       ],
       methodType: [
-        "Kort fakta: Hormonelle metoder kan påvirke blødning, humør og krop. Ikke-hormonelle metoder undgår hormoner, men har andre begrænsninger.",
-        "Kort fakta: Kobberspiral er uden hormoner. Hormonspiral, p-piller, p-stav, plaster, ring og sprøjte bruger hormoner.",
-        "Kort fakta: Akut prævention er ikke en fast metode. Den bruges efter præventionssvigt eller ubeskyttet sex.",
+        "Svarhjælp: Du kan svare hormonel, uden hormoner, akut eller permanent. Hvis du ikke ved det, så sig hvad du helst vil undgå.",
+        "Svarhjælp: Hormonel betyder at metoden påvirker kroppens cyklus. Uden hormoner betyder fx kobber eller barriere. Vælg den retning, der føles mest relevant.",
+        "Svarhjælp: Akut betyder efter ubeskyttet sex eller præventionssvigt. Permanent betyder en varig løsning. De fleste vælger mellem hormonel og uden hormoner.",
       ],
     };
     const options = facts[question?.id] || [
-      "Kort fakta: Uklart input er stadig data. Det fortæller systemet, at ansvaret ikke er nemt placeret.",
+      "Svarhjælp: Prøv at svare med den mulighed, der ligger tættest på din situation. Systemet kræver ikke et perfekt svar.",
     ];
     return options[consultation.invalidCount % options.length];
   }
