@@ -382,7 +382,7 @@ Alt handler om prævention. Alt andet er støj.
   function openingMessage() {
     consultation.currentQuestionText = "Er du klar til at starte session?";
     return (
-      "Velkommen til den automatiserede præventionsscreening. Jeg beregner prævention baseret på dine input.\n\n" +
+      "Velkommen til den automatiserede præventionsscreening. Jeg beregner prævention baseret på dine input. Du er velkommen til at stille spørgsmål undervejs, hvis du er i tvivl.\n\n" +
       consultation.currentQuestionText
     );
   }
