@@ -700,17 +700,21 @@ Alt handler om prævention. Alt andet er støj.
     if (isClearlyIrrelevant(text)) {
       return rejectCurrentInput();
     }
+    /*
     const questionAnswer = answerRelevantUserQuestion(text);
     if (questionAnswer) {
       return `${questionAnswer}\n\n${repeatCurrentQuestion()}`;
     }
+    */
     if (isHelpOrDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
+    /*
     const explanation = explainUnknownTerm(text);
     if (explanation) {
       return explainAndRepeatCurrentQuestion(explanation);
     }
+    */
     if (!answerMatchesQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
@@ -770,7 +774,13 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function rejectCurrentInput() {
-    return unclearAnswerReply();
+    consultation.invalidCount += 1;
+    if (consultation.invalidCount >= 3) {
+      consultation = createConsultation();
+      consultationRunning = false;
+      return "Tryk på START for at starte ny session.";
+    }
+    return `Data er ugyldig. …\n${repeatCurrentQuestion()}`;
   }
 
   function rejectCurrentInputOld() {
@@ -1063,6 +1073,19 @@ Alt handler om prævention. Alt andet er støj.
     return lower.split(/\s+/).length >= 3 && !/(bla bla|whatever|ligeglad|aner ikke)/.test(lower);
   }
 
+  function answerMatchesQuestion(question, text) {
+    const lower = normalizeSpokenText(text);
+    if (!lower || isHelpOrDoubtInput(lower)) return false;
+
+    const checks = {
+      purpose: /graviditet|undgaa graviditet|undgå graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
+      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende|glemmer|husker/,
+      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
+    };
+
+    return !!checks[question?.id]?.test(lower);
+  }
+
   function chooseRecommendation(answers) {
     const combined = Object.values(answers).join(" ").toLowerCase();
     const purpose = String(answers.purpose || "").toLowerCase();
@@ -1117,7 +1140,7 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function finalRecommendationText(recommendation, answers) {
-    return `"Tildeling gennemført."\n\n${clinicalOutputText(recommendation, answers)}`;
+    return `Robotlægen: "Tildeling gennemført."\n\n${clinicalOutputText(recommendation, answers)}`;
   }
 
   function inequalitySystemNote() {
