@@ -700,6 +700,10 @@ Alt handler om prævention. Alt andet er støj.
     if (isClearlyIrrelevant(text)) {
       return rejectCurrentInput();
     }
+    const questionAnswer = answerRelevantUserQuestion(text);
+    if (questionAnswer) {
+      return `${questionAnswer}\n\n${repeatCurrentQuestion()}`;
+    }
     if (isHelpOrDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
@@ -841,6 +845,52 @@ Alt handler om prævention. Alt andet er støj.
       methodType: "Kort forklaring: Metodetype betyder hvilken slags prævention du foretrækker. Hormonel bruger hormoner. Ikke-hormonel gør ikke.",
     };
     return explanations[question?.id] || "Kort forklaring: Jeg forklarer kun begreber, der hører til præventionsscreeningen.";
+  }
+
+  function answerRelevantUserQuestion(text) {
+    const lower = normalizeSpokenText(text);
+    if (!isUserQuestion(text, lower)) return "";
+    if (!isContraceptionRelated(lower) && !/(hormon|spiral|pille|kondom|kvittering|bivirkning|effektiv|gravid|smitte|menstruation|permanent|akut)/.test(lower)) {
+      return "";
+    }
+
+    const explanation = explainUnknownTerm(text);
+    if (explanation) return explanation;
+
+    if (/effektiv|sikker|virker|procent/.test(lower)) {
+      return "Svar: Effektivitet afhænger af metode og korrekt brug. Systemet angiver effektivitet ved tildeling.";
+    }
+    if (/bivirkning|ondt|kvalme|hovedpine|humør|humoer|blødning|bloeding/.test(lower)) {
+      return "Svar: Bivirkninger varierer efter metode og krop. Systemet registrerer typiske bivirkninger i output.";
+    }
+    if (/hormon|hormoner/.test(lower)) {
+      return "Svar: Hormoner kan påvirke cyklus, blødning og ægløsning. Det er en klassificering, ikke en anbefaling.";
+    }
+    if (/kønssygdom|koenssygdom|smitte|sti|sygdom/.test(lower)) {
+      return "Svar: Kønssygdomme kræver barrierebeskyttelse. Kondom og femidom er relevante barrieremetoder.";
+    }
+    if (/kvittering|print|printer/.test(lower)) {
+      return "Svar: Kvitteringen genereres efter tildeling. Den printes, men oplæses ikke fuldt.";
+    }
+    if (/hvad skal jeg vælge|hvad skal jeg vaelge|hvad passer|hvilken er bedst|bedst/.test(lower)) {
+      return "Svar: Systemet vælger efter dine input. Du skal vælge den svarmulighed, der passer bedst til spørgsmålet.";
+    }
+    if (/akut|nød|noed/.test(lower)) {
+      return "Svar: Akut prævention bruges efter ubeskyttet sex eller svigtet prævention. Det er ikke en fast metode.";
+    }
+    if (/permanent|sterilisation/.test(lower)) {
+      return "Svar: Permanent prævention er lavet til at vare resten af livet. Systemet klassificerer det som permanent løsning.";
+    }
+
+    return "Svar: Spørgsmålet er registreret inden for præventionsdomænet. Systemet fortsætter med screeningsspørgsmålet.";
+  }
+
+  function isUserQuestion(rawText, normalizedText) {
+    const raw = String(rawText || "").trim();
+    return (
+      raw.includes("?") ||
+      /^(hvad|hvorfor|hvordan|hvilken|hvilket|hvem|kan|må|maa|skal|betyder|er det|virker)/.test(normalizedText)
+    );
   }
 
   function isUnseriousInput(text) {

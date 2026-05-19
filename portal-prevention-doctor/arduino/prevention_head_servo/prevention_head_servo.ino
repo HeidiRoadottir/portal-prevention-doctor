@@ -52,9 +52,9 @@ const int EYE_UD_MIN = 55;
 const int EYE_UD_CENTER = 92;
 const int EYE_UD_MAX = 130;
 
-const int HEAD_YAW_MIN = 35;
+const int HEAD_YAW_MIN = 25;
 const int HEAD_YAW_CENTER = 75;
-const int HEAD_YAW_MAX = 115;
+const int HEAD_YAW_MAX = 125;
 
 const int MOUTH_CLOSED = 42;
 const int MOUTH_MID = 68;
@@ -194,6 +194,7 @@ void handleLine(String line) {
   } else if (line.startsWith("PRINT|")) {
     parkFaceForPrint();
     printReceipt(line);
+    restoreFaceAfterPrint();
     setState("waiting_for_reply");
   }
 }
@@ -204,6 +205,28 @@ void parkFaceForPrint() {
   headYawTarget = HEAD_YAW_CENTER;
   mouthTarget = MOUTH_CLOSED;
   writeServosImmediate();
+  delay(220);
+  servoEyeLR.detach();
+  servoHeadYaw.detach();
+  servoMouth.detach();
+  lastGazeShiftAt = millis();
+  lastHeadShiftAt = millis();
+}
+
+void restoreFaceAfterPrint() {
+  servoEyeLR.attach(SERVO_EYE_LR_PIN);
+  servoHeadYaw.attach(SERVO_HEAD_YAW_PIN);
+  servoMouth.attach(SERVO_MOUTH_PIN);
+  eyeLRTarget = EYE_LR_CENTER;
+  eyeLRValue = EYE_LR_CENTER;
+  headYawTarget = HEAD_YAW_CENTER;
+  headYawValue = HEAD_YAW_CENTER;
+  mouthTarget = MOUTH_CLOSED;
+  mouthValue = MOUTH_CLOSED;
+  servoEyeLR.write(EYE_LR_CENTER);
+  servoHeadYaw.write(HEAD_YAW_CENTER);
+  servoMouth.write(MOUTH_CLOSED);
+  delay(120);
   lastGazeShiftAt = millis();
   lastHeadShiftAt = millis();
 }
@@ -244,6 +267,11 @@ void printReceipt(const String &line) {
   printerSerial.println("---");
   printerSerial.println();
   printReceiptFooter(fields[6]);
+  printerSerial.println();
+  printerSerial.println();
+  printerSerial.println();
+  printerSerial.println();
+  printerSerial.println();
   printerSerial.println();
   printerSerial.println();
   printerSerial.println();
@@ -364,21 +392,21 @@ void updateGazeTargets() {
   if (currentState == "processing") {
     const float horizontalPhase = (float)(now % 1900UL) / 1900.0f;
     const float verticalPhase = (float)(now % 1300UL) / 1300.0f;
-    eyeLRTarget = EYE_LR_CENTER + (int)round(sinf(horizontalPhase * TWO_PI) * 18.0f);
+    eyeLRTarget = EYE_LR_CENTER + (int)round(sinf(horizontalPhase * TWO_PI) * 4.0f);
     eyeUDTarget = EYE_UD_CENTER + (int)round(sinf(verticalPhase * TWO_PI + 0.7f) * 18.0f);
 
     if ((now / 420UL) % 3UL == 0UL) {
-      eyeLRTarget = randomInt(EYE_LR_CENTER - 20, EYE_LR_CENTER + 20);
+      eyeLRTarget = randomInt(EYE_LR_CENTER - 5, EYE_LR_CENTER + 5);
       eyeUDTarget = randomInt(EYE_UD_CENTER - 18, EYE_UD_CENTER + 18);
     }
   } else if (currentState == "speaking") {
-    eyeLRTarget = randomInt(EYE_LR_CENTER - 14, EYE_LR_CENTER + 14);
+    eyeLRTarget = randomInt(EYE_LR_CENTER - 5, EYE_LR_CENTER + 5);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 5, EYE_UD_CENTER + 5);
   } else if (currentState == "waiting_for_reply") {
-    eyeLRTarget = randomInt(EYE_LR_CENTER - 4, EYE_LR_CENTER + 4);
+    eyeLRTarget = randomInt(EYE_LR_CENTER - 2, EYE_LR_CENTER + 2);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 2, EYE_UD_CENTER + 2);
   } else {
-    eyeLRTarget = randomInt(EYE_LR_CENTER - 14, EYE_LR_CENTER + 14);
+    eyeLRTarget = randomInt(EYE_LR_CENTER - 6, EYE_LR_CENTER + 6);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 4, EYE_UD_CENTER + 4);
   }
 }
@@ -393,15 +421,15 @@ void updateHeadTargets() {
   nextHeadShiftDelayMs = pickHeadDelayForState();
 
   if (currentState == "idle" || currentState == "ready") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 15, HEAD_YAW_CENTER + 15);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 28, HEAD_YAW_CENTER + 28);
   } else if (currentState == "listening") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 8, HEAD_YAW_CENTER + 8);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 18, HEAD_YAW_CENTER + 18);
   } else if (currentState == "processing") {
-    headYawTarget = HEAD_YAW_CENTER + (int)round(sinf(now / 820.0f) * 26.0f);
+    headYawTarget = HEAD_YAW_CENTER + (int)round(sinf(now / 920.0f) * 38.0f);
   } else if (currentState == "speaking") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 11, HEAD_YAW_CENTER + 11);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 22, HEAD_YAW_CENTER + 22);
   } else if (currentState == "waiting_for_reply") {
-    headYawTarget = randomInt(HEAD_YAW_CENTER - 3, HEAD_YAW_CENTER + 3);
+    headYawTarget = randomInt(HEAD_YAW_CENTER - 8, HEAD_YAW_CENTER + 8);
   }
 }
 
@@ -487,10 +515,10 @@ unsigned long pickGazeDelayForState() {
 }
 
 unsigned long pickHeadDelayForState() {
-  if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(1400, 2400);
+  if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(2200, 3600);
   if (currentState == "processing") return (unsigned long)randomInt(180, 260);
-  if (currentState == "speaking") return (unsigned long)randomInt(700, 1300);
-  return (unsigned long)randomInt(1100, 2200);
+  if (currentState == "speaking") return (unsigned long)randomInt(1200, 2100);
+  return (unsigned long)randomInt(1800, 3000);
 }
 
 void scheduleGazeShiftFromNow() {
