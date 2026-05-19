@@ -39,7 +39,6 @@ const unsigned long PRINTER_BAUD = 9600;
 
 const uint8_t BUTTON_PIN = 2;
 const uint8_t SERVO_EYE_LR_PIN = 3;
-const uint8_t SERVO_EYE_UD_PIN = 5;
 const uint8_t SERVO_HEAD_YAW_PIN = 6;
 const uint8_t SERVO_MOUTH_PIN = 9;
 const uint8_t PRINTER_RX_PIN = 10;
@@ -68,7 +67,6 @@ const unsigned long MANUAL_MOUTH_HOLD_MS = 420;
 const unsigned long BUTTON_DEBOUNCE_MS = 45;
 
 Servo servoEyeLR;
-Servo servoEyeUD;
 Servo servoHeadYaw;
 Servo servoMouth;
 
@@ -111,7 +109,6 @@ void setup() {
 #endif
 
   servoEyeLR.attach(SERVO_EYE_LR_PIN);
-  servoEyeUD.attach(SERVO_EYE_UD_PIN);
   servoHeadYaw.attach(SERVO_HEAD_YAW_PIN);
   servoMouth.attach(SERVO_MOUTH_PIN);
 
@@ -195,8 +192,20 @@ void handleLine(String line) {
     lastManualMouthAt = millis();
     mouthTarget = map(manualMouthPercent, 0, 100, MOUTH_CLOSED, MOUTH_OPEN);
   } else if (line.startsWith("PRINT|")) {
+    parkFaceForPrint();
     printReceipt(line);
+    setState("waiting_for_reply");
   }
+}
+
+void parkFaceForPrint() {
+  eyeLRTarget = EYE_LR_CENTER;
+  eyeUDTarget = EYE_UD_CENTER;
+  headYawTarget = HEAD_YAW_CENTER;
+  mouthTarget = MOUTH_CLOSED;
+  writeServosImmediate();
+  lastGazeShiftAt = millis();
+  lastHeadShiftAt = millis();
 }
 
 void resetPrinter() {
@@ -435,21 +444,18 @@ void updateStateTargets() {
 
 void easeServos() {
   eyeLRValue += (eyeLRTarget - eyeLRValue) * SERVO_SMOOTHING;
-  eyeUDValue += (eyeUDTarget - eyeUDValue) * SERVO_SMOOTHING;
   headYawValue += (headYawTarget - headYawValue) * SERVO_SMOOTHING;
   mouthValue += (mouthTarget - mouthValue) * MOUTH_SMOOTHING;
 }
 
 void writeServos() {
   servoEyeLR.write((int)round(eyeLRValue));
-  servoEyeUD.write((int)round(eyeUDValue));
   servoHeadYaw.write((int)round(headYawValue));
   servoMouth.write((int)round(mouthValue));
 }
 
 void writeServosImmediate() {
   eyeLRValue = eyeLRTarget;
-  eyeUDValue = eyeUDTarget;
   headYawValue = headYawTarget;
   mouthValue = mouthTarget;
   writeServos();
