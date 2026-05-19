@@ -1438,6 +1438,7 @@ Alt handler om prævention. Alt andet er støj.
   function shouldUseTranscript(text) {
     const transcript = String(text || "").trim();
     if (transcript.length < 2) return false;
+    if (isLikelyTranscriptionHallucination(transcript)) return false;
     if (isRobotEcho(transcript)) return false;
 
     const normalized = normalizeSpokenText(transcript);
@@ -1447,6 +1448,17 @@ Alt handler om prævention. Alt andet er støj.
     lastMediaTranscript = normalized;
     lastMediaTranscriptAt = now;
     return true;
+  }
+
+  function isLikelyTranscriptionHallucination(text) {
+    const normalized = normalizeSpokenText(text);
+    if (!normalized) return true;
+    if (/^(prævention|praevention) omfatter/.test(normalized)) return true;
+    if (/en konsultation kan hjælpe|en konsultation kan hjaelpe/.test(normalized)) return true;
+    if (/metoder som kondomer spiral og p piller/.test(normalized)) return true;
+    if (/forhindrer graviditet og kan beskytte mod/.test(normalized)) return true;
+    if (/vælge den rette metode|vaelge den rette metode/.test(normalized)) return true;
+    return false;
   }
 
   function recordAudioChunk(durationMs) {

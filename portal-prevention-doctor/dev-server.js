@@ -137,7 +137,7 @@ http
         form.append("language", "da");
         form.append(
           "prompt",
-          "Transskriber dansk tale fra en Raspberry Pi-installation. Brug dansk stavning. Emnet er prævention, kondom, graviditet, kønssygdomme, hormoner, spiral, p-piller og konsultation. Returner kun det brugeren siger."
+          "Transskriber kun tydelig dansk tale fra brugeren. Returner ikke forklaringer, fakta, resumeer eller gaet. Hvis talen er robotstemmen, baggrundslyd eller uklar, returner tom tekst."
         );
         form.append("file", new Blob([audio], { type: contentType }), "speech.webm");
 
