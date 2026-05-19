@@ -1421,7 +1421,7 @@ Alt handler om prævention. Alt andet er støj.
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
         const text = await transcribeAudio(blob);
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
-        if (String(text || "").trim()) system(activeChat, `Transskription: ${text}`);
+        if (consultation.awaitingStart && !isReadyConfirmation(text)) continue;
         if (shouldUseTranscript(text)) {
           await onText(text);
         }
