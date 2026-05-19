@@ -1411,7 +1411,7 @@ Alt handler om prævention. Alt andet er støj.
 
   async function mediaTranscriptionLoop(onText, runId) {
     while (mediaListening && runId === mediaListenRunId) {
-      if (recognitionSuspended || state !== "listening" || mediaTranscriptBusy) {
+      if (recognitionSuspended || state !== "listening" || mediaTranscriptBusy || Date.now() < ignoreSpeechUntil) {
         await sleep(250);
         continue;
       }
@@ -1533,19 +1533,20 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function resumeRecognitionAfterSpeech() {
-    ignoreSpeechUntil = Date.now() + 1800;
+    ignoreSpeechUntil = Date.now() + 3200;
     if (!listening || !activeSpeechHandler) return;
     window.setTimeout(() => {
       if (!listening || !activeSpeechHandler) return;
       recognitionSuspended = false;
       startListening(activeSpeechHandler);
-    }, 450);
+    }, 2200);
   }
 
   function isRobotEcho(text) {
     const normalized = String(text || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
     if (!normalized) return true;
-    return /^(robotlægen|robotlaegen|velkommen|er du klar til at starte session|registreret|data registreret|svar registreret|input afvist|angiv|vælg|vaelg|analyserer data|system beregner|præventionsformer|praeventionsformer|beregning fortsætter|beregning fortsaetter|tildeling gennemført|tildeling gennemfoert|systemnote|præventionsmuligheder|praeventionsmuligheder|din kvittering genereres|systemet genererer|session afsluttet|her er din kvittering)/i.test(normalized);
+    if (/^(robotlægen|robotlaegen|velkommen|er du klar til at starte session|registreret|data registreret|svar registreret|input afvist|angiv|vælg|vaelg|analyserer data|system beregner|præventionsformer|praeventionsformer|beregning fortsætter|beregning fortsaetter|tildeling gennemført|tildeling gennemfoert|systemnote|præventionsmuligheder|praeventionsmuligheder|din kvittering genereres|systemet genererer|session afsluttet|her er din kvittering)/i.test(normalized)) return true;
+    return /(jeg beregner prævention baseret på dine input|du er velkommen til at stille spørgsmål|prævention omfatter metoder|en konsultation kan hjælpe|graviditet og kan beskytte mod kønssygdomme)/i.test(normalized);
   }
 
   async function speakWithOpenAI(text, runId) {
