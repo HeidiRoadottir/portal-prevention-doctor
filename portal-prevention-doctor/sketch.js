@@ -405,21 +405,21 @@ function animateRobotTargets() {
     target.head = 90 + sin(t * 0.7) * 5;
     target.eyeX = 90 + sin(t * 1.2) * 8;
     target.eyeY = 88 + sin(t * 0.9) * 4;
-    target.mouth = 10;
+    target.mouth = 3;
   } else if (mode === "listening") {
     target.head = 86 + sin(t * 1.1) * 4;
     target.eyeX = 92 + sin(t * 2.1) * 5;
     target.eyeY = 82;
-    target.mouth = 8;
+    target.mouth = 3;
   } else if (mode === "processing") {
     target.head = 102 + sin(t * 5.5) * 3;
-    target.eyeX = 76 + sin(t * 9) * 4;
-    target.eyeY = 78;
-    target.mouth = 6;
+    target.eyeX = 90 + sin(t * 7.2) * 14;
+    target.eyeY = 88 + sin(t * 5.9 + 0.7) * 10;
+    target.mouth = 2;
   } else if (mode === "speaking") {
     target.head += sin(t * 2.2) * 0.8;
-    target.eyeX += sin(t * 3.1) * 0.6;
-    target.mouth = 18 + Math.abs(sin(t * 12.5)) * 38;
+    target.eyeX += sin(t * 3.1) * 1.2;
+    target.mouth = 14 + Math.abs(sin(t * 12.5)) * 40;
   }
 
   robot.head = lerp(robot.head, target.head, 0.18);
@@ -500,7 +500,7 @@ function drawRobot() {
   const headOffset = map(robot.head, 50, 130, -34, 34) * scaleFactor;
   const eyeDx = map(robot.eyeX, 50, 130, -18, 18) * scaleFactor;
   const eyeDy = map(robot.eyeY, 60, 115, -12, 12) * scaleFactor;
-  const mouthOpen = map(robot.mouth, 0, 65, 8, 46) * scaleFactor;
+  const mouthOpen = map(robot.mouth, 0, 65, 3, 46) * scaleFactor;
 
   noStroke();
   fill(34, 42, 32);

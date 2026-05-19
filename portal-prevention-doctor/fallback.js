@@ -354,8 +354,9 @@ Alt handler om prævention. Alt andet er støj.
     messages.push({ role: "assistant", text: opening });
     messages = messages.slice(-12);
 
-    setState("processing");
+    setState("ready");
     renderStatus(status);
+    await sleep(220);
     await speak(opening);
 
     if (!consultationRunning) return;
@@ -1499,13 +1500,13 @@ Alt handler om prævention. Alt andet er støj.
   function pulseMouth() {
     sendMouth(78 + Math.round(Math.random() * 20));
     if (mouthCloseTimer) window.clearTimeout(mouthCloseTimer);
-    mouthCloseTimer = window.setTimeout(() => sendMouth(16), 95);
+    mouthCloseTimer = window.setTimeout(() => sendMouth(0), 95);
   }
 
   function startMouthIdle() {
     stopMouthIdle();
     mouthIdleTimer = window.setInterval(() => {
-      sendMouth(38 + Math.round(Math.random() * 42));
+      sendMouth(24 + Math.round(Math.random() * 46));
     }, 170);
   }
 
@@ -1665,13 +1666,15 @@ Alt handler om prævention. Alt andet er støj.
     ctx.translate(headX, headY);
     roundRect(ctx, -headW / 2, -headH / 2, headW, headH, 24 * scale, "#d2d6c7", "#4c5446");
     roundRect(ctx, -headW * 0.36, -86 * scale, headW * 0.72, 84 * scale, 12 * scale, "#1e221c");
-    const eyeX = Math.sin(t * (speaking ? 3 : idleOrReady ? 0.62 : 1.4)) * (idleOrReady ? 7 : 10) * scale;
-    const scanPhase = (t * 0.75) % 1;
-    const scanY = (-30 + scanPhase * 60) * scale;
+    const eyeX = thinking
+      ? Math.sin(t * 7.2) * 15 * scale
+      : Math.sin(t * (speaking ? 3 : idleOrReady ? 0.62 : 1.4)) * (idleOrReady ? 7 : 10) * scale;
+    const scanPhase = (t * 0.9) % 1;
+    const scanY = (-28 + scanPhase * 56) * scale;
     const eyeY = thinking ? scanY : (listeningNow ? -7 : Math.sin(t * (idleOrReady ? 0.48 : 0.9)) * (idleOrReady ? 3 : 4)) * scale;
     eye(-48 * scale + eyeX, -48 * scale + eyeY, scale);
     eye(48 * scale + eyeX, -48 * scale + eyeY, scale);
-    const mouth = (speaking ? 24 + Math.abs(Math.sin(t * 13.5)) * 54 : 10) * scale;
+    const mouth = (speaking ? 18 + Math.abs(Math.sin(t * 13.5)) * 54 : 5) * scale;
     roundRect(ctx, -52 * scale, 78 * scale - mouth / 2, 104 * scale, mouth, 9 * scale, "#2c2622", "#3c2824");
     ctx.restore();
 

@@ -61,7 +61,7 @@ const int MOUTH_CLOSED = 42;
 const int MOUTH_MID = 68;
 const int MOUTH_OPEN = 95;
 
-const float SERVO_SMOOTHING = 0.07f;
+const float SERVO_SMOOTHING = 0.10f;
 const float MOUTH_SMOOTHING = 0.34f;
 const unsigned long BOOT_SETTLE_MS = 1400;
 const unsigned long MANUAL_MOUTH_HOLD_MS = 420;
@@ -172,7 +172,7 @@ void readButton() {
 
     if (buttonState == LOW) {
       Serial.println("BUTTON:start");
-      setState("listening");
+      setState("start");
     }
   }
 }
@@ -324,11 +324,12 @@ void splitReceiptFields(const String &line, String fields[], int fieldCount) {
 void setState(const String &next) {
   currentState = next;
 
-  if (currentState == "reset" || currentState == "boot") {
+  if (currentState == "reset" || currentState == "boot" || currentState == "start") {
     eyeLRTarget = EYE_LR_CENTER;
     eyeUDTarget = EYE_UD_CENTER;
     headYawTarget = HEAD_YAW_CENTER;
     mouthTarget = MOUTH_CLOSED;
+    writeServosImmediate();
     return;
   }
 
@@ -352,12 +353,18 @@ void updateGazeTargets() {
   nextGazeShiftDelayMs = pickGazeDelayForState();
 
   if (currentState == "processing") {
-    eyeLRTarget = EYE_LR_CENTER;
-    const float scanPhase = (float)(now % 1600UL) / 1600.0f;
-    eyeUDTarget = EYE_UD_MIN + (int)round(scanPhase * (EYE_UD_MAX - EYE_UD_MIN));
+    const float horizontalPhase = (float)(now % 1900UL) / 1900.0f;
+    const float verticalPhase = (float)(now % 1300UL) / 1300.0f;
+    eyeLRTarget = EYE_LR_CENTER + (int)round(sinf(horizontalPhase * TWO_PI) * 18.0f);
+    eyeUDTarget = EYE_UD_CENTER + (int)round(sinf(verticalPhase * TWO_PI + 0.7f) * 18.0f);
+
+    if ((now / 420UL) % 3UL == 0UL) {
+      eyeLRTarget = randomInt(EYE_LR_CENTER - 20, EYE_LR_CENTER + 20);
+      eyeUDTarget = randomInt(EYE_UD_CENTER - 18, EYE_UD_CENTER + 18);
+    }
   } else if (currentState == "speaking") {
-    eyeLRTarget = randomInt(EYE_LR_CENTER - 12, EYE_LR_CENTER + 12);
-    eyeUDTarget = randomInt(EYE_UD_CENTER - 3, EYE_UD_CENTER + 3);
+    eyeLRTarget = randomInt(EYE_LR_CENTER - 14, EYE_LR_CENTER + 14);
+    eyeUDTarget = randomInt(EYE_UD_CENTER - 5, EYE_UD_CENTER + 5);
   } else if (currentState == "waiting_for_reply") {
     eyeLRTarget = randomInt(EYE_LR_CENTER - 4, EYE_LR_CENTER + 4);
     eyeUDTarget = randomInt(EYE_UD_CENTER - 2, EYE_UD_CENTER + 2);
@@ -392,7 +399,7 @@ void updateHeadTargets() {
 void updateStateTargets() {
   const unsigned long now = millis();
 
-  if (currentState == "boot" || currentState == "reset") {
+  if (currentState == "boot" || currentState == "reset" || currentState == "start") {
     eyeLRTarget = EYE_LR_CENTER;
     eyeUDTarget = EYE_UD_CENTER;
     headYawTarget = HEAD_YAW_CENTER;
@@ -467,8 +474,8 @@ bool shouldRoamHead() {
 
 unsigned long pickGazeDelayForState() {
   if (currentState == "idle" || currentState == "ready") return (unsigned long)randomInt(1700, 2800);
-  if (currentState == "processing") return (unsigned long)randomInt(90, 140);
-  if (currentState == "speaking") return (unsigned long)randomInt(550, 1050);
+  if (currentState == "processing") return (unsigned long)randomInt(70, 120);
+  if (currentState == "speaking") return (unsigned long)randomInt(480, 850);
   if (currentState == "waiting_for_reply") return (unsigned long)randomInt(1800, 2800);
   return (unsigned long)randomInt(900, 1700);
 }
