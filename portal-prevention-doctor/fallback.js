@@ -770,6 +770,10 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function rejectCurrentInput() {
+    return unclearAnswerReply();
+  }
+
+  function rejectCurrentInputOld() {
     consultation.invalidCount += 1;
     if (consultation.invalidCount >= 3) {
       consultation = createConsultation();
@@ -781,6 +785,10 @@ Alt handler om prævention. Alt andet er støj.
   }
 
   function clarifyCurrentQuestion() {
+    return unclearAnswerReply();
+  }
+
+  function clarifyCurrentQuestionOld() {
     consultation.invalidCount += 1;
     if (consultation.invalidCount >= 3) {
       consultation = createConsultation();
@@ -790,6 +798,36 @@ Alt handler om prævention. Alt andet er støj.
 
     const question = consultationQuestions[consultation.step];
     return `${question?.help || "Okay … Lad mig stille det anderledes."}\n\n${repeatCurrentQuestion()}`;
+  }
+
+  function unclearAnswerReply() {
+    consultation.invalidCount += 1;
+    const question = consultationQuestions[consultation.step];
+    return `${relevantFact(question)}\n\n${repeatCurrentQuestion()}`;
+  }
+
+  function relevantFact(question) {
+    const facts = {
+      purpose: [
+        "Kort fakta: Kondom er den eneste af de almindelige metoder her, der også kan beskytte mod flere kønssygdomme.",
+        "Kort fakta: Prævention kan handle om graviditet, smitte, blødning eller flere ting på samme tid. Systemet kræver bare en retning.",
+        "Kort fakta: Hvis både graviditet og kønssygdomme er relevante, ender svaret ofte med kondom alene eller kondom sammen med en anden metode.",
+      ],
+      usage: [
+        "Kort fakta: Daglige metoder kræver hukommelse. Langtidsvirkende metoder flytter ansvaret fra hver dag til en klinisk indsættelse.",
+        "Kort fakta: P-piller kræver gentagelse. Spiral og p-stav virker i længere tid uden daglig handling.",
+        "Kort fakta: Jo mere en metode kræver i øjeblikket, jo mere kan glemsel og partneradfærd påvirke resultatet.",
+      ],
+      methodType: [
+        "Kort fakta: Hormonelle metoder kan påvirke blødning, humør og krop. Ikke-hormonelle metoder undgår hormoner, men har andre begrænsninger.",
+        "Kort fakta: Kobberspiral er uden hormoner. Hormonspiral, p-piller, p-stav, plaster, ring og sprøjte bruger hormoner.",
+        "Kort fakta: Akut prævention er ikke en fast metode. Den bruges efter præventionssvigt eller ubeskyttet sex.",
+      ],
+    };
+    const options = facts[question?.id] || [
+      "Kort fakta: Uklart input er stadig data. Det fortæller systemet, at ansvaret ikke er nemt placeret.",
+    ];
+    return options[consultation.invalidCount % options.length];
   }
 
   function explainAndRepeatCurrentQuestion(explanation) {
@@ -918,6 +956,24 @@ Alt handler om prævention. Alt andet er støj.
     return question?.id !== "usage";
   }
 
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
+    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
+  }
+
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
+    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
+  }
+
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
+    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
+  }
+
   function answerMatchesQuestion(question, text) {
     const lower = String(text || "").toLowerCase().trim();
     if (!lower) return false;
@@ -960,6 +1016,27 @@ Alt handler om prævention. Alt andet er støj.
     // OpenAI transcription returns natural Danish phrases, not button-like
     // option values. After the session has started, accept substantive speech
     // and let the recommendation logic infer what it can.
+    return lower.length >= 3;
+  }
+
+  function isHelpOrDoubtInput(text) {
+    const lower = normalizeSpokenText(text);
+    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
+    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
+  }
+
+  function answerMatchesQuestion(question, text) {
+    const lower = normalizeSpokenText(text);
+    if (!lower || isHelpOrDoubtInput(lower)) return false;
+
+    const checks = {
+      purpose: /graviditet|undgaa graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
+      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende/,
+      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
+    };
+
+    if (checks[question?.id]?.test(lower)) return true;
+    if (isContraceptionRelated(lower)) return true;
     return lower.length >= 3;
   }
 
