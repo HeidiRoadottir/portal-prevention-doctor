@@ -112,6 +112,7 @@ Alt handler om prævention. Alt andet er støj.
   let ignoreSpeechUntil = 0;
   let currentAudio = null;
   let speechRunId = 0;
+  let recentRobotSpeech = [];
 
   window.onerror = (message, source, lineno, colno, error) => {
     showFatal(`JavaScript-fejl: ${message}`, error && error.stack);
@@ -1417,7 +1418,9 @@ Alt handler om prævention. Alt andet er støj.
       }
 
       try {
+        const chunkStartedAt = Date.now();
         const blob = await recordAudioChunk(5200);
+        if (chunkStartedAt < ignoreSpeechUntil) continue;
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
         const text = await transcribeAudio(blob);
         if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
@@ -1487,6 +1490,7 @@ Alt handler om prævention. Alt andet er støj.
     speechRunId += 1;
     const runId = speechRunId;
     const startedAt = Date.now();
+    rememberRobotSpeech(text);
     stopCurrentAudio();
     stopMouthAudio();
     window.speechSynthesis?.cancel?.();
@@ -1542,9 +1546,48 @@ Alt handler om prævention. Alt andet er støj.
     }, 2200);
   }
 
+  function rememberRobotSpeech(text) {
+    const normalized = normalizeEchoText(text);
+    if (!normalized) return;
+    const until = Date.now() + 45000;
+    recentRobotSpeech = [
+      { text: normalized, until },
+      ...normalized.split(/[.!?\n]+/).map((part) => ({ text: normalizeEchoText(part), until })),
+      ...recentRobotSpeech,
+    ]
+      .filter((item) => item.text && item.until > Date.now())
+      .slice(0, 24);
+  }
+
+  function normalizeEchoText(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function resemblesRecentRobotSpeech(text) {
+    const normalized = normalizeEchoText(text);
+    if (!normalized || normalized.length < 8) return false;
+    const now = Date.now();
+    recentRobotSpeech = recentRobotSpeech.filter((item) => item.until > now);
+    const words = normalized.split(/\s+/).filter((word) => word.length > 2);
+    if (!words.length) return false;
+
+    return recentRobotSpeech.some((item) => {
+      if (!item.text) return false;
+      if (item.text.includes(normalized) || normalized.includes(item.text)) return true;
+      const robotWords = new Set(item.text.split(/\s+/).filter((word) => word.length > 2));
+      const overlap = words.filter((word) => robotWords.has(word)).length;
+      return overlap >= Math.min(5, Math.ceil(words.length * 0.65));
+    });
+  }
+
   function isRobotEcho(text) {
     const normalized = String(text || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
     if (!normalized) return true;
+    if (resemblesRecentRobotSpeech(normalized)) return true;
     if (/^(robotlægen|robotlaegen|velkommen|er du klar til at starte session|registreret|data registreret|svar registreret|input afvist|angiv|vælg|vaelg|analyserer data|system beregner|præventionsformer|praeventionsformer|beregning fortsætter|beregning fortsaetter|tildeling gennemført|tildeling gennemfoert|systemnote|præventionsmuligheder|praeventionsmuligheder|din kvittering genereres|systemet genererer|session afsluttet|her er din kvittering)/i.test(normalized)) return true;
     return /(jeg beregner prævention baseret på dine input|du er velkommen til at stille spørgsmål|prævention omfatter metoder|en konsultation kan hjælpe|graviditet og kan beskytte mod kønssygdomme)/i.test(normalized);
   }
