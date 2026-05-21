@@ -1029,10 +1029,41 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
   }
 
   function normalizeChoiceText(value) {
-    return normalizeSpokenText(value)
+    const normalized = normalizeSpokenText(value)
       .replace(/[\u00e6\u00c6]/g, "ae")
       .replace(/[\u00f8\u00d8]/g, "oe")
       .replace(/[\u00e5\u00c5]/g, "aa");
+    return normalizeTranscriptLookalikes(normalized);
+  }
+
+  function normalizeTranscriptLookalikes(text) {
+    return ` ${text} `
+      .replace(/\bkommuner\b/g, " hormoner ")
+      .replace(/\bkommune\b/g, " hormone ")
+      .replace(/\bhormone\b/g, " hormon ")
+      .replace(/\bhormonerne\b/g, " hormoner ")
+      .replace(/\bkoen sygdomme\b/g, " koenssygdomme ")
+      .replace(/\bkoens sygdomme\b/g, " koenssygdomme ")
+      .replace(/\bkoen sygdom\b/g, " koenssygdom ")
+      .replace(/\bkoens sygdom\b/g, " koenssygdom ")
+      .replace(/\bnoed praevention\b/g, " noedpraevention ")
+      .replace(/\bnod praevention\b/g, " noedpraevention ")
+      .replace(/\bkobber spiral\b/g, " kobberspiral ")
+      .replace(/\bhormon spiral\b/g, " hormonspiral ")
+      .replace(/\bp piller\b/g, " p-piller ")
+      .replace(/\bmini piller\b/g, " minipiller ")
+      .replace(/\bmini pille\b/g, " minipille ")
+      .replace(/\bp stav\b/g, " p-stav ")
+      .replace(/\bp ring\b/g, " p-ring ")
+      .replace(/\bp plaster\b/g, " p-plaster ")
+      .replace(/\bp sproejte\b/g, " p-sproejte ")
+      .replace(/\bflere oar\b/g, " flere aar ")
+      .replace(/\bflere ar\b/g, " flere aar ")
+      .replace(/\bflere r\b/g, " flere aar ")
+      .replace(/\bm neder\b/g, " maaneder ")
+      .replace(/\bg re\b/g, " goere ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function finalRecommendationText(recommendation, answers) {
