@@ -964,7 +964,7 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     const wantsHormonal = /hormon|hormoner|pille|stav|plaster|ring|sproejte|spiral/.test(methodType) && !wantsNonHormonal;
     const wantsDaily = /daglig|dagligt|hver dag|hver morgen|hver aften|pille|huske/.test(usage);
     const wantsLong = /langvarig|lang tid|laenge|laengere periode|flere maaneder|flere maneder|flere m neder|flere aar|flere ar|flere r|maaneder|maneder|m neder|aar| ar |eller r|sjaeldent|ikke taenke paa det|uden at goere noget|uden at g re noget|uden du skal goere|virker i flere|glemmer|daarlig til at huske|diskret|spiral|stav|plaster|ring|sproejte/.test(` ${usage} `);
-    let method = "P-PILLER";
+    let method = null;
 
     if (wantsStiProtection) {
       method = "KONDOM";
@@ -994,6 +994,10 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
       method = "KOBBERSPIRAL";
     }
 
+    if (!method) {
+      method = randomContraceptionMethod();
+    }
+
     return {
       method,
       receipt: receiptTemplates[method],
@@ -1001,6 +1005,27 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
       partner: "",
       redFlag: method === "N\u00d8DPR\u00c6VENTION",
     };
+  }
+
+  function randomContraceptionMethod() {
+    const methods = [
+      "P-PILLER",
+      "MINI-PILLER",
+      "KOBBERSPIRAL",
+      "HORMONSPIRAL",
+      "P-STAV",
+      "P-RING",
+      "P-SPR\u00d8JTE",
+      "PESSAR",
+      "FEMIDOM",
+      "P-PLASTER",
+      "STERILISATION (KVINDE)",
+      "STERILISATION (MAND)",
+      "N\u00d8DPR\u00c6VENTION",
+      "KONDOM",
+      "KONDOM + S\u00c6DDR\u00c6BENDE MIDDEL",
+    ];
+    return methods[Math.floor(Math.random() * methods.length)];
   }
 
   function normalizeChoiceText(value) {
