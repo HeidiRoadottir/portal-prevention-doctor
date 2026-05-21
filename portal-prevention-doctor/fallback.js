@@ -878,29 +878,29 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
   }
 
   function chooseRecommendation(answers) {
-    const combined = Object.values(answers).join(" ").toLowerCase();
-    const purpose = String(answers.purpose || "").toLowerCase();
-    const usage = String(answers.usage || "").toLowerCase();
-    const methodType = String(answers.methodType || "").toLowerCase();
-    const wantsStiProtection = /kønssygdom|kønssygdomme|sygdomme|klamydia|smitte|sexsygdom|sexsygdomme/.test(purpose);
+    const combined = normalizeChoiceText(Object.values(answers).join(" "));
+    const purpose = normalizeChoiceText(answers.purpose);
+    const usage = normalizeChoiceText(answers.usage);
+    const methodType = normalizeChoiceText(answers.methodType);
+    const wantsStiProtection = /koenssygdom|koenssygdomme|sygdom|sygdomme|klamydia|smitte|sexsygdom|sexsygdomme/.test(purpose);
     const wantsCombination = /kombination|begge|begge dele|flere/.test(purpose);
     const wantsMenstruation = /menstruation|mens|regulere|cyklus/.test(purpose);
-    const wantsPermanent = /permanent|for altid|aldrig have børn|aldrig have boern|færdig med børn|faerdig med boern|operation/.test(usage) || /permanent|for altid|sterilisation/.test(methodType);
-    const wantsAcute = /akut|nød|noed|nu og her|hurtigt|efter sex|i går|i gaar|kondomet sprang|glemte kondom/.test(usage) || /akut|nød|noed/.test(methodType);
-    const wantsNonHormonal = /ikke-hormonel|ikke hormonel|uden hormon|uden hormoner|ingen hormoner|kobber/.test(methodType);
-    const wantsHormonal = /hormonel|hormon|hormoner|med hormon|pille|stav|plaster|ring|sprøjte|sproejte|spiral/.test(methodType) && !wantsNonHormonal;
-    const wantsDaily = /daglig|hver dag|hver morgen|hver aften|pille|huske/.test(usage);
-    const wantsLong = /langvarig|lang tid|længe|laenge|længere periode|laengere periode|sjældent|sjaeldent|ikke tænke på det|ikke taenke paa det|glemmer|dårlig til at huske|daarlig til at huske|diskret|spiral|stav|plaster|ring|sprøjte|sproejte/.test(usage);
+    const wantsPermanent = /permanent|for altid|aldrig have boern|faerdig med boern|operation|sterilisation/.test(combined);
+    const wantsAcute = /akut|noed|nu og her|hurtigt|efter sex|i gaar|kondomet sprang|glemte kondom/.test(combined);
+    const wantsNonHormonal = /ikke hormonel|uden hormon|uden hormoner|ingen hormoner|kobber/.test(methodType);
+    const wantsHormonal = /hormon|hormoner|pille|stav|plaster|ring|sproejte|spiral/.test(methodType) && !wantsNonHormonal;
+    const wantsDaily = /daglig|dagligt|hver dag|hver morgen|hver aften|pille|huske/.test(usage);
+    const wantsLong = /langvarig|lang tid|laenge|laengere periode|flere maaneder|flere maneder|flere m neder|flere aar|flere ar|flere r|maaneder|maneder|m neder|aar| ar |eller r|sjaeldent|ikke taenke paa det|uden at goere noget|uden at g re noget|uden du skal goere|virker i flere|glemmer|daarlig til at huske|diskret|spiral|stav|plaster|ring|sproejte/.test(` ${usage} `);
     let method = "P-PILLER";
 
     if (wantsStiProtection) {
       method = "KONDOM";
-    } else if (wantsPermanent && /mand|mænd/.test(combined)) {
+    } else if (wantsPermanent && /mand|maend/.test(combined)) {
       method = "STERILISATION (MAND)";
     } else if (wantsPermanent) {
       method = "STERILISATION (KVINDE)";
     } else if (wantsAcute) {
-      method = "NØDPRÆVENTION";
+      method = "N\u00d8DPR\u00c6VENTION";
     } else if (wantsCombination && wantsHormonal && wantsLong) {
       method = "HORMONSPIRAL + KONDOM";
     } else if (wantsCombination && wantsNonHormonal) {
@@ -909,14 +909,14 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
       method = "HORMONSPIRAL";
     } else if (wantsMenstruation && wantsHormonal && wantsDaily) {
       method = "P-PILLER";
-    } else if (wantsHormonal && wantsDaily) {
-      method = /menstruation|smerter|pms|akne|hud|pcos|endometriose/.test(purpose) ? "P-PILLER" : "P-PILLER";
     } else if (wantsHormonal && wantsLong) {
       method = /hud|akne/.test(purpose) ? "P-STAV" : "HORMONSPIRAL";
+    } else if (wantsHormonal && wantsDaily) {
+      method = "P-PILLER";
     } else if (wantsNonHormonal && wantsLong) {
       method = "KOBBERSPIRAL";
     } else if (wantsNonHormonal && wantsDaily) {
-      method = "KONDOM + SÆDDRÆBENDE MIDDEL";
+      method = "KONDOM + S\u00c6DDR\u00c6BENDE MIDDEL";
     } else if (wantsNonHormonal) {
       method = "KOBBERSPIRAL";
     }
@@ -926,8 +926,15 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
       receipt: receiptTemplates[method],
       reason: "",
       partner: "",
-      redFlag: method === "NØDPRÆVENTION",
+      redFlag: method === "N\u00d8DPR\u00c6VENTION",
     };
+  }
+
+  function normalizeChoiceText(value) {
+    return normalizeSpokenText(value)
+      .replace(/[\u00e6\u00c6]/g, "ae")
+      .replace(/[\u00f8\u00d8]/g, "oe")
+      .replace(/[\u00e5\u00c5]/g, "aa");
   }
 
   function finalRecommendationText(recommendation, answers) {
