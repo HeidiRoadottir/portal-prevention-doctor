@@ -83,9 +83,7 @@ Alt handler om prævention. Alt andet er støj.
   let serialWriter = null;
   let serialReader = null;
   let serialReadyAt = 0;
-  let recognition = null;
   let listening = false;
-  let recognitionSuspended = false;
   let activeSpeechHandler = null;
   let mediaStream = null;
   let mediaListening = false;
@@ -701,21 +699,9 @@ Alt handler om prævention. Alt andet er støj.
     if (isClearlyIrrelevant(text)) {
       return rejectCurrentInput();
     }
-    /*
-    const questionAnswer = answerRelevantUserQuestion(text);
-    if (questionAnswer) {
-      return `${questionAnswer}\n\n${repeatCurrentQuestion()}`;
-    }
-    */
     if (isHelpOrDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
-    /*
-    const explanation = explainUnknownTerm(text);
-    if (explanation) {
-      return explainAndRepeatCurrentQuestion(explanation);
-    }
-    */
     if (!answerMatchesQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
     }
@@ -784,31 +770,8 @@ Alt handler om prævention. Alt andet er støj.
     return `Data er ugyldig. …\n${repeatCurrentQuestion()}`;
   }
 
-  function rejectCurrentInputOld() {
-    consultation.invalidCount += 1;
-    if (consultation.invalidCount >= 3) {
-      consultation = createConsultation();
-      consultationRunning = false;
-      return "Tryk på START for at starte ny session.";
-    }
-
-    return `Data er ugyldig. …\n${repeatCurrentQuestion()}`;
-  }
-
   function clarifyCurrentQuestion() {
     return unclearAnswerReply();
-  }
-
-  function clarifyCurrentQuestionOld() {
-    consultation.invalidCount += 1;
-    if (consultation.invalidCount >= 3) {
-      consultation = createConsultation();
-      consultationRunning = false;
-      return "Tryk på START for at starte ny session.";
-    }
-
-    const question = consultationQuestions[consultation.step];
-    return `${question?.help || "Okay … Lad mig stille det anderledes."}\n\n${repeatCurrentQuestion()}`;
   }
 
   function unclearAnswerReply() {
@@ -817,139 +780,9 @@ Alt handler om prævention. Alt andet er støj.
     return `${question?.help || "Okay ... Lad mig specificere."}\n\n${repeatCurrentQuestion()}`;
   }
 
-  function relevantFact(question) {
-    const facts = {
-      purpose: [
-        "Svarhjælp: Hvis du er i tvivl, kan du vælge mellem fire formål: undgå graviditet, beskytte mod kønssygdomme, regulere menstruation, eller en kombination.",
-        "Svarhjælp: Tænk på hvad der er vigtigst lige nu. Er det graviditet, smitte, menstruation, eller flere ting samtidig?",
-        "Svarhjælp: Hvis både graviditet og kønssygdomme betyder noget, kan du sige kombination. Systemet kan godt registrere mere end én bekymring.",
-      ],
-      usage: [
-        "Svarhjælp: Du kan svare med daglig metode, hvis du godt kan huske noget hver dag. Du kan svare langtidsvirkende, hvis du hellere vil slippe for daglig handling.",
-        "Svarhjælp: Tænk på om du vil have kontrol hver dag, eller om metoden helst skal passe sig selv i flere måneder eller år.",
-        "Svarhjælp: Hvis du ofte glemmer ting, er det relevant at sige det. Systemet registrerer hukommelse som en del af ansvarsfordelingen.",
-      ],
-      methodType: [
-        "Svarhjælp: Du kan svare hormonel, uden hormoner, akut eller permanent. Hvis du ikke ved det, så sig hvad du helst vil undgå.",
-        "Svarhjælp: Hormonel betyder at metoden påvirker kroppens cyklus. Uden hormoner betyder fx kobber eller barriere. Vælg den retning, der føles mest relevant.",
-        "Svarhjælp: Akut betyder efter ubeskyttet sex eller præventionssvigt. Permanent betyder en varig løsning. De fleste vælger mellem hormonel og uden hormoner.",
-      ],
-    };
-    const options = facts[question?.id] || [
-      "Svarhjælp: Prøv at svare med den mulighed, der ligger tættest på din situation. Systemet kræver ikke et perfekt svar.",
-    ];
-    return options[consultation.invalidCount % options.length];
-  }
-
-  function explainAndRepeatCurrentQuestion(explanation) {
-    consultation.invalidCount += 1;
-    if (consultation.invalidCount >= 3) {
-      consultation = createConsultation();
-      consultationRunning = false;
-      return "Tryk på START for at starte ny session.";
-    }
-
-    return `${explanation}\n\n${repeatCurrentQuestion()}`;
-  }
-
-  function explainUnknownTerm(text) {
-    const lower = String(text || "").toLowerCase().trim();
-    if (!/(hvad er|hvad betyder|ved ikke hvad|forstår ikke|forstÃ¥r ikke|kender ikke)/.test(lower)) return "";
-
-    const explanations = [
-      [/kønssygdom|koenssygdom|sexsygdom|smitte/, "Kønssygdomme er sygdomme, der kan smitte ved sex. Kondom og femidom kan beskytte mod flere af dem."],
-      [/graviditet|gravid/, "Graviditet betyder, at et befrugtet æg udvikler sig i livmoderen. Prævention kan bruges til at mindske risikoen."],
-      [/menstruation|mens|blødning|bloeding/, "Menstruation er blødning fra livmoderen. Nogle præventionsformer kan påvirke hvor ofte eller hvor kraftigt du bløder."],
-      [/symptomlindring|smerter|pms/, "Symptomlindring betyder at mindske gener. Her handler det typisk om menstruationssmerter, PMS eller kraftig blødning."],
-      [/hormonel|hormon/, "Hormonel prævention indeholder hormoner. De kan påvirke ægløsning, blødning og risikoen for graviditet."],
-      [/ikke[- ]hormonel|uden hormon/, "Ikke-hormonel prævention betyder prævention uden hormoner. Det kan for eksempel være kobberspiral, kondom, femidom eller pessar."],
-      [/akut|nød|noed/, "Akut prævention bruges efter ubeskyttet sex eller svigtet prævention. Det er en nødløsning, ikke en fast metode."],
-      [/permanent|sterilisation/, "Permanent prævention betyder en metode, der er lavet til at vare resten af livet. Sterilisation er permanent prævention."],
-      [/pcos/, "PCOS er en hormonel tilstand, der kan påvirke menstruation, hud og ægløsning."],
-      [/endometriose/, "Endometriose er en sygdom, hvor væv, der ligner livmoderslimhinde, findes uden for livmoderen. Det kan give smerter."],
-      [/barriere/, "Barrieremetoder lægger en fysisk barriere mellem sæd og krop. Kondom, femidom og pessar er barrieremetoder."],
-      [/pessar/, "Pessar er en lille skål af silikone, der sættes op i skeden før sex. Den dækker livmoderhalsen."],
-      [/femidom|kvindekondom/, "Femidom er et kondom, der placeres i skeden. Det kan beskytte mod graviditet og kønssygdomme."],
-      [/kobberspiral/, "Kobberspiral er en lille genstand med kobber, der sættes op i livmoderen. Den indeholder ikke hormoner."],
-      [/hormonspiral|spiral/, "Spiral er en lille genstand, der sættes op i livmoderen. Kobberspiral er uden hormon. Hormonspiral afgiver hormon lokalt."],
-      [/p-stav|stav/, "P-stav er en lille hormonstav, der sættes under huden i overarmen. Den virker i længere tid."],
-      [/p-ring|ring/, "P-ring er en blød hormonring, der placeres i skeden og skiftes efter en fast rytme."],
-      [/p-plaster|plaster/, "P-plaster er et hormonplaster, der sættes på huden og skiftes regelmæssigt."],
-      [/p-sprøjte|p-sproejte|sprøjte|sproejte/, "P-sprøjte er hormonel prævention, der gives som en indsprøjtning cirka hver tredje måned."],
-      [/mini-pille|minipille/, "Mini-piller er hormonpiller, der tages hver dag på cirka samme tidspunkt."],
-      [/p-pille|pille/, "P-piller er hormonpiller, der tages hver dag. De bruges ofte til at forebygge graviditet."],
-    ];
-
-    const found = explanations.find(([pattern]) => pattern.test(lower));
-    if (found) return `Kort forklaring: ${found[1]}`;
-    return contextualExplanation();
-  }
-
-  function contextualExplanation() {
-    const question = consultationQuestions[consultation.step];
-    const explanations = {
-      purpose: "Kort forklaring: Formål betyder, hvorfor du vil bruge prævention. Det kan handle om graviditet, menstruation, smerter eller hud.",
-      protection: "Kort forklaring: Beskyttelse betyder, hvad præventionen skal beskytte imod. Det kan være graviditet, kønssygdomme eller begge dele.",
-      usage: "Kort forklaring: Anvendelse betyder, hvordan metoden bruges. Nogle bruges dagligt, nogle virker længe, nogle bruges akut, og nogle er permanente.",
-      methodType: "Kort forklaring: Metodetype betyder hvilken slags prævention du foretrækker. Hormonel bruger hormoner. Ikke-hormonel gør ikke.",
-    };
-    return explanations[question?.id] || "Kort forklaring: Jeg forklarer kun begreber, der hører til præventionsscreeningen.";
-  }
-
-  function answerRelevantUserQuestion(text) {
-    const lower = normalizeSpokenText(text);
-    if (!isUserQuestion(text, lower)) return "";
-    if (!isContraceptionRelated(lower) && !/(hormon|spiral|pille|kondom|kvittering|bivirkning|effektiv|gravid|smitte|menstruation|permanent|akut)/.test(lower)) {
-      return "";
-    }
-
-    const explanation = explainUnknownTerm(text);
-    if (explanation) return explanation;
-
-    if (/effektiv|sikker|virker|procent/.test(lower)) {
-      return "Svar: Effektivitet afhænger af metode og korrekt brug. Systemet angiver effektivitet ved tildeling.";
-    }
-    if (/bivirkning|ondt|kvalme|hovedpine|humør|humoer|blødning|bloeding/.test(lower)) {
-      return "Svar: Bivirkninger varierer efter metode og krop. Systemet registrerer typiske bivirkninger i output.";
-    }
-    if (/hormon|hormoner/.test(lower)) {
-      return "Svar: Hormoner kan påvirke cyklus, blødning og ægløsning. Det er en klassificering, ikke en anbefaling.";
-    }
-    if (/kønssygdom|koenssygdom|smitte|sti|sygdom/.test(lower)) {
-      return "Svar: Kønssygdomme kræver barrierebeskyttelse. Kondom og femidom er relevante barrieremetoder.";
-    }
-    if (/kvittering|print|printer/.test(lower)) {
-      return "Svar: Kvitteringen genereres efter tildeling. Den printes, men oplæses ikke fuldt.";
-    }
-    if (/hvad skal jeg vælge|hvad skal jeg vaelge|hvad passer|hvilken er bedst|bedst/.test(lower)) {
-      return "Svar: Systemet vælger efter dine input. Du skal vælge den svarmulighed, der passer bedst til spørgsmålet.";
-    }
-    if (/akut|nød|noed/.test(lower)) {
-      return "Svar: Akut prævention bruges efter ubeskyttet sex eller svigtet prævention. Det er ikke en fast metode.";
-    }
-    if (/permanent|sterilisation/.test(lower)) {
-      return "Svar: Permanent prævention er lavet til at vare resten af livet. Systemet klassificerer det som permanent løsning.";
-    }
-
-    return "Svar: Spørgsmålet er registreret inden for præventionsdomænet. Systemet fortsætter med screeningsspørgsmålet.";
-  }
-
-  function isUserQuestion(rawText, normalizedText) {
-    const raw = String(rawText || "").trim();
-    return (
-      raw.includes("?") ||
-      /^(hvad|hvorfor|hvordan|hvilken|hvilket|hvem|kan|må|maa|skal|betyder|er det|virker)/.test(normalizedText)
-    );
-  }
-
   function isUnseriousInput(text) {
     const lower = String(text || "").toLowerCase().trim();
     return /(fuck|fisse|pik|lort|røv|rÃ¸v|sexmaskine|din mor|haha|lol|blah|bla bla|skibidi|sigma|gyat|idiot|hold kæft|hold kÃ¦ft)/i.test(lower);
-  }
-
-  function isDoubtInput(text) {
-    const lower = String(text || "").toLowerCase().trim();
-    return /^(ja|nej|måske|mÃ¥ske|ok|okay|ved ikke|det ved jeg ikke|ingen ide|pas|hvad|gentag|forstår ikke|forstÃ¥r ikke|hjælp|hjÃ¦lp|\?)$/.test(lower);
   }
 
   function isClearlyIrrelevant(text) {
@@ -965,113 +798,6 @@ Alt handler om prævention. Alt andet er støj.
     const vague = /^(sikker|trygt|nemt|let|bedst|normalt|almindeligt|noget godt|det bedste|jeg er usikker|det sikreste|bare noget der virker)$/;
     if (!vague.test(lower)) return false;
     return question?.id !== "usage";
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
-    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
-    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
-    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
-  }
-
-  function answerMatchesQuestion(question, text) {
-    const lower = String(text || "").toLowerCase().trim();
-    if (!lower) return false;
-    if (isDoubtInput(lower)) {
-      return false;
-    }
-
-    const checks = {
-      purpose: /graviditet|undgå graviditet|undgaa graviditet|ikke blive gravid|kønssygdom|kønssygdomme|sygdomme|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|begge dele|flere/,
-      usage: /hver dag|daglig|dagligt|huske|pille|flere måneder|flere maaneder|flere år|flere aar|langvarig|lang tid|længe|laenge|uden at gøre noget|uden at goere noget|ikke tænke på det|ikke taenke paa det|løbende|loebende/,
-      methodType: /hormonel|hormon|hormoner|med hormon|ikke-hormonel|ikke hormonel|uden hormon|uden hormoner|ingen hormoner|akut|nød|noed|permanent|for altid|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sprøjte|sproejte|det nemmeste|noget nemt|noget diskret/,
-    };
-
-    if (checks[question?.id]?.test(lower)) return true;
-    return isContraceptionRelated(lower);
-  }
-
-  function isContraceptionRelated(text) {
-    return /prævention|praevention|beskyttelse|gravid|graviditet|baby|børn|boern|kønssygdom|koenssygdom|sygdom|klamydia|smitte|sex|samleje|kondom|femidom|pessar|pille|p-pille|mini-pille|spiral|kobber|hormon|stav|plaster|ring|sprøjte|sproejte|sterilisation|nødprævention|noedpraevention|menstruation|mens|blødning|bloeding|smerter|pms|akne|bumser|hud|pcos|endometriose|bivirkning|daglig|langvarig|akut|permanent|diskret|glemmer|nemt|let/i.test(text);
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    return /^(måske|maaske|ved ikke|det ved jeg ikke|ingen ide|pas|hvad|gentag|forstår ikke|forstaar ikke|hjælp|hjaelp|\?)$/.test(lower);
-  }
-
-  function answerMatchesQuestion(question, text) {
-    const lower = normalizeSpokenText(text);
-    if (!lower || isHelpOrDoubtInput(lower)) return false;
-
-    const checks = {
-      purpose: /graviditet|undgaa graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
-      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende/,
-      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
-    };
-
-    if (checks[question?.id]?.test(lower)) return true;
-    if (isContraceptionRelated(lower)) return true;
-
-    // OpenAI transcription returns natural Danish phrases, not button-like
-    // option values. After the session has started, accept substantive speech
-    // and let the recommendation logic infer what it can.
-    return lower.length >= 3;
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    if (/(ved ikke|vidste ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
-    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
-  }
-
-  function answerMatchesQuestion(question, text) {
-    const lower = normalizeSpokenText(text);
-    if (!lower || isHelpOrDoubtInput(lower)) return false;
-
-    const checks = {
-      purpose: /graviditet|undgaa graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
-      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende/,
-      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
-    };
-
-    if (checks[question?.id]?.test(lower)) return true;
-    if (isContraceptionRelated(lower)) return true;
-    return lower.length >= 3;
-  }
-
-  function isHelpOrDoubtInput(text) {
-    const lower = normalizeSpokenText(text);
-    if (/(ved ikke|ved det ikke|vidste ikke|det ved jeg ikke|det vidste jeg ikke|ingen ide|forstår ikke|forstaar ikke|hjælp|hjaelp|gentag)/.test(lower)) return true;
-    return /^(måske|maaske|pas|hvad|\?)$/.test(lower);
-  }
-
-  function answerMatchesQuestion(question, text) {
-    const lower = normalizeSpokenText(text);
-    if (!lower || isHelpOrDoubtInput(lower)) return false;
-
-    const checks = {
-      purpose: /graviditet|undgaa graviditet|undgå graviditet|ikke blive gravid|koenssygdom|kønssygdom|sygdom|smitte|klamydia|menstruation|mens|regulere|cyklus|kombination|begge|flere/,
-      usage: /hver dag|daglig|dagligt|huske|pille|maaneder|måneder|aar|år|langvarig|lang tid|laenge|længe|uden at goere noget|uden at gøre noget|loebende|løbende|glemmer|husker/,
-      methodType: /hormon|hormoner|ikke hormonel|uden hormon|ingen hormoner|akut|noed|nød|permanent|kobber|barriere|kondom|femidom|pessar|spiral|pille|stav|plaster|ring|sproejte|sprøjte|diskret/,
-    };
-
-    if (checks[question?.id]?.test(lower)) return true;
-    if (isContraceptionRelated(lower)) return true;
-
-    // Accept normal spoken answers, but not pure uncertainty/filler.
-    return lower.split(/\s+/).length >= 3 && !/(bla bla|whatever|ligeglad|aner ikke)/.test(lower);
   }
 
   function answerMatchesQuestion(question, text) {
@@ -1341,41 +1067,12 @@ Alt handler om prævention. Alt andet er støj.
 
   function startListening(onText) {
     startMediaListening(onText);
-    return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    activeSpeechHandler = onText;
-    recognitionSuspended = false;
-    recognition = new SpeechRecognition();
-    recognition.lang = "da-DK";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    const recognitionSession = recognition;
-    recognition.onresult = (event) => {
-      if (recognition !== recognitionSession) return;
-      if (Date.now() < ignoreSpeechUntil) return;
-      const result = event.results[event.results.length - 1];
-      const text = result && result[0] ? result[0].transcript : "";
-      if (isRobotEcho(text)) return;
-      if (text.trim()) onText(text);
-    };
-    recognition.onend = () => {
-      if (recognition !== recognitionSession) return;
-      if (listening && !recognitionSuspended) recognition.start();
-    };
-    listening = true;
-    setState("listening");
-    recognition.start();
   }
 
   function stopListening() {
     listening = false;
-    recognitionSuspended = false;
     activeSpeechHandler = null;
     stopMediaListening();
-    if (recognition) recognition.stop();
-    recognition = null;
     setState("idle");
   }
 
@@ -1412,7 +1109,7 @@ Alt handler om prævention. Alt andet er støj.
 
   async function mediaTranscriptionLoop(onText, runId) {
     while (mediaListening && runId === mediaListenRunId) {
-      if (recognitionSuspended || state !== "listening" || mediaTranscriptBusy || Date.now() < ignoreSpeechUntil) {
+      if (state !== "listening" || mediaTranscriptBusy || Date.now() < ignoreSpeechUntil) {
         await sleep(250);
         continue;
       }
@@ -1421,9 +1118,9 @@ Alt handler om prævention. Alt andet er støj.
         const chunkStartedAt = Date.now();
         const blob = await recordAudioChunk(5200);
         if (chunkStartedAt < ignoreSpeechUntil) continue;
-        if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
+        if (!mediaListening || runId !== mediaListenRunId) continue;
         const text = await transcribeAudio(blob);
-        if (!mediaListening || runId !== mediaListenRunId || recognitionSuspended) continue;
+        if (!mediaListening || runId !== mediaListenRunId) continue;
         if (consultation.awaitingStart && !isReadyConfirmation(text)) continue;
         if (shouldUseTranscript(text)) {
           await onText(text);
@@ -1506,7 +1203,7 @@ Alt handler om prævention. Alt andet er støj.
     stopCurrentAudio();
     stopMouthAudio();
     window.speechSynthesis?.cancel?.();
-    suspendRecognitionWhileSpeaking();
+    pauseMicrophoneWhileSpeaking();
 
     try {
       if ((!apiKey && isGitHubPages()) || !USE_OPENAI_TTS) return await speakWithBrowser(text, runId);
@@ -1518,7 +1215,7 @@ Alt handler om prævention. Alt andet er støj.
       if (runId === speechRunId && Date.now() - startedAt < 1200) {
         await holdSpeakingFallback(text, runId);
       }
-      if (runId === speechRunId) resumeRecognitionAfterSpeech();
+      if (runId === speechRunId) resumeMicrophoneAfterSpeech();
     }
   }
 
@@ -1537,23 +1234,15 @@ Alt handler om prævention. Alt andet er støj.
     return Math.max(2400, Math.min(9000, 900 + words * 360));
   }
 
-  function suspendRecognitionWhileSpeaking() {
+  function pauseMicrophoneWhileSpeaking() {
     ignoreSpeechUntil = Date.now() + 4000;
-    if (!listening || !recognition) return;
-    recognitionSuspended = true;
-    try {
-      recognition.stop();
-    } catch {
-      // Browser speech recognition can already be stopping.
-    }
   }
 
-  function resumeRecognitionAfterSpeech() {
+  function resumeMicrophoneAfterSpeech() {
     ignoreSpeechUntil = Date.now() + 3200;
     if (!listening || !activeSpeechHandler) return;
     window.setTimeout(() => {
       if (!listening || !activeSpeechHandler) return;
-      recognitionSuspended = false;
       startListening(activeSpeechHandler);
     }, 2200);
   }
