@@ -779,7 +779,8 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     }
 
     const question = consultationQuestions[consultation.step];
-    return `${question?.help || "Okay … Lad mig stille det anderledes."}\n\n${repeatCurrentQuestion()}`;
+    const explanation = question?.help || "Okay \u2026 Lad mig stille det anderledes.";
+    return `${formatSystemExplanation(explanation)}\n\n${repeatCurrentQuestion()}`;
   }
 
   function explainAndRepeatCurrentQuestion(explanation) {
@@ -790,7 +791,16 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
       return "Tryk på START for at starte ny session.";
     }
 
-    return `${explanation}\n\n${repeatCurrentQuestion()}`;
+    return `${formatSystemExplanation(explanation)}\n\n${repeatCurrentQuestion()}`;
+  }
+
+  function formatSystemExplanation(explanation) {
+    const cleaned = String(explanation || "").trim();
+    if (!cleaned) return "Forst\u00e5et. Vi anvender en anden tilgang.";
+    if (/^(Okay|Forst\u00e5et|Forstaaet|Svar registreret|Forklaring)/.test(cleaned)) {
+      return cleaned;
+    }
+    return `Forst\u00e5et. Vi anvender en anden tilgang.\n${cleaned}`;
   }
 
   function explainUnknownTerm(text) {
@@ -822,7 +832,7 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     ];
 
     const found = explanations.find(([pattern]) => pattern.test(lower));
-    if (found) return `Kort forklaring: ${found[1]}`;
+    if (found) return `Forklaring: ${found[1]}`;
     return contextualExplanation();
   }
 
@@ -836,31 +846,31 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     if (termExplanation) return termExplanation;
 
     if (/effektiv|sikker|virker|procent|risiko/.test(normalized)) {
-      return "Kort svar: Effektivitet afh\u00e6nger af metode og korrekt brug. Systemet registrerer effektivitet i tildelingen.";
+      return "Svar registreret. Forklaring: Effektivitet afh\u00e6nger af metode og korrekt brug. Systemet registrerer effektivitet i tildelingen.";
     }
     if (/bivirkning|blodning|bloeding|smerter|kvalme|hovedpine|humoer|humor|hud|akne|bumser/.test(normalized)) {
-      return "Kort svar: Bivirkninger afh\u00e6nger af metode og krop. Systemet registrerer typiske bivirkninger i output.";
+      return "Svar registreret. Forklaring: Bivirkninger afh\u00e6nger af metode og krop. Systemet registrerer typiske bivirkninger i output.";
     }
     if (/hormon|cyklus|aeglosning|aegloesning/.test(normalized)) {
-      return "Kort svar: Hormoner kan p\u00e5virke cyklus, bl\u00f8dning og \u00e6gl\u00f8sning. Det er en metodekategori.";
+      return "Svar registreret. Forklaring: Hormoner kan p\u00e5virke cyklus, bl\u00f8dning og \u00e6gl\u00f8sning. Det er en metodekategori.";
     }
     if (/koenssygdom|sygdom|smitte|klamydia|sexsygdom/.test(normalized)) {
-      return "Kort svar: K\u00f8nssygdomme kr\u00e6ver barrierebeskyttelse. Kondom og femidom er relevante barrieremetoder.";
+      return "Svar registreret. Forklaring: K\u00f8nssygdomme kr\u00e6ver barrierebeskyttelse. Kondom og femidom er relevante barrieremetoder.";
     }
     if (/spiral|kobber/.test(normalized)) {
-      return "Kort svar: Spiral er en metode, der inds\u00e6ttes i livmoderen. Kobberspiral er uden hormoner. Hormonspiral afgiver hormon lokalt.";
+      return "Svar registreret. Forklaring: Spiral er en metode, der inds\u00e6ttes i livmoderen. Kobberspiral er uden hormoner. Hormonspiral afgiver hormon lokalt.";
     }
     if (/akut|noed|nod|efter sex|kondomet sprang/.test(normalized)) {
-      return "Kort svar: Akut pr\u00e6vention bruges efter ubeskyttet sex eller pr\u00e6ventionssvigt. Det er ikke en fast metode.";
+      return "Svar registreret. Forklaring: Akut pr\u00e6vention bruges efter ubeskyttet sex eller pr\u00e6ventionssvigt. Det er ikke en fast metode.";
     }
     if (/permanent|sterilisation|operation|for altid/.test(normalized)) {
-      return "Kort svar: Permanent pr\u00e6vention er lavet til at vare resten af livet. Systemet klassificerer det som permanent l\u00f8sning.";
+      return "Svar registreret. Forklaring: Permanent pr\u00e6vention er lavet til at vare resten af livet. Systemet klassificerer det som permanent l\u00f8sning.";
     }
     if (/hvad skal jeg vaelge|hvad bor jeg|hvad boer jeg|hvilken skal jeg|anbefal|bedst|bedste/.test(normalized)) {
-      return "Kort svar: Systemet v\u00e6lger efter dine input. V\u00e6lg den svarmulighed, der passer bedst til sp\u00f8rgsm\u00e5let.";
+      return "Svar registreret. Forklaring: Systemet v\u00e6lger efter dine input. V\u00e6lg den svarmulighed, der passer bedst til sp\u00f8rgsm\u00e5let.";
     }
 
-    return "Kort svar: Sp\u00f8rgsm\u00e5let er registreret inden for pr\u00e6ventionsdom\u00e6net.";
+    return "Svar registreret. Forklaring: Sp\u00f8rgsm\u00e5let er registreret inden for pr\u00e6ventionsdom\u00e6net.";
   }
 
   function isUserQuestion(rawText, normalizedText) {
@@ -876,12 +886,12 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
   function contextualExplanation() {
     const question = consultationQuestions[consultation.step];
     const explanations = {
-      purpose: "Kort forklaring: Formål betyder, hvorfor du vil bruge prævention. Det kan handle om graviditet, menstruation, smerter eller hud.",
-      protection: "Kort forklaring: Beskyttelse betyder, hvad præventionen skal beskytte imod. Det kan være graviditet, kønssygdomme eller begge dele.",
-      usage: "Kort forklaring: Anvendelse betyder, hvordan metoden bruges. Nogle bruges dagligt, nogle virker længe, nogle bruges akut, og nogle er permanente.",
-      methodType: "Kort forklaring: Metodetype betyder hvilken slags prævention du foretrækker. Hormonel bruger hormoner. Ikke-hormonel gør ikke.",
+      purpose: "Forklaring: Formål betyder, hvorfor du vil bruge prævention. Det kan handle om graviditet, menstruation, smerter eller hud.",
+      protection: "Forklaring: Beskyttelse betyder, hvad præventionen skal beskytte imod. Det kan være graviditet, kønssygdomme eller begge dele.",
+      usage: "Forklaring: Anvendelse betyder, hvordan metoden bruges. Nogle bruges dagligt, nogle virker længe, nogle bruges akut, og nogle er permanente.",
+      methodType: "Forklaring: Metodetype betyder hvilken slags prævention du foretrækker. Hormonel bruger hormoner. Ikke-hormonel gør ikke.",
     };
-    return explanations[question?.id] || "Kort forklaring: Jeg forklarer kun begreber, der hører til præventionsscreeningen.";
+    return explanations[question?.id] || "Forklaring: Jeg forklarer kun begreber, der hører til præventionsscreeningen.";
   }
 
   function isUnseriousInput(text) {
@@ -896,12 +906,18 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
   }
 
   function isUnclearForQuestion(question, text) {
-    const lower = String(text || "").toLowerCase().trim();
-    if (/^(det ved jeg ikke|ved ikke|ingen ide|pas|måske|mÃ¥ske|hvad mener du|kan du hjælpe|kan du hjÃ¦lpe|hjælp|hjÃ¦lp|det er svært|det er svaert|jeg er i tvivl)$/.test(lower)) {
+    const raw = String(text || "");
+    const lower = raw.toLowerCase().trim();
+    const normalized = normalizeChoiceText(text);
+    if (/\?/.test(raw)) return true;
+    if (/^(det ved jeg ikke|ved ikke|ingen ide|pas|maaske|hvad|hvad mener du|hvad betyder det|kan du forklare|forklar|kan du hjaelpe|hjaelp|det er svaert|jeg er i tvivl)$/.test(normalized)) {
+      return true;
+    }
+    if (/jeg forstaar|forstaar ikke|forstaar det ikke|forstaar ikke spoergsmaalet|jeg forstaar ikke spoergsmaalet/.test(normalized)) {
       return true;
     }
     const vague = /^(sikker|trygt|nemt|let|bedst|normalt|almindeligt|noget godt|det bedste|jeg er usikker|det sikreste|bare noget der virker)$/;
-    if (!vague.test(lower)) return false;
+    if (!vague.test(lower) && !vague.test(normalized)) return false;
     return question?.id !== "usage";
   }
 
