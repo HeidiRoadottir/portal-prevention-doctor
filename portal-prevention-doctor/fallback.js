@@ -668,6 +668,12 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
         return `Registreret. Vi begynder.\n…\n\n${consultation.currentQuestionText}`;
       }
 
+      const startAnswer = answerRelevantUserQuestion(text);
+      if (startAnswer) {
+        consultation.currentQuestionText = readyQuestion();
+        return `${startAnswer}\n\n${consultation.currentQuestionText}`;
+      }
+
       consultation.readyFailures += 1;
       if (consultation.readyFailures >= 3) {
         consultationRunning = false;
@@ -683,6 +689,10 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     }
     if (isClearlyIrrelevant(text)) {
       return rejectCurrentInput();
+    }
+    const questionAnswer = answerRelevantUserQuestion(text);
+    if (questionAnswer) {
+      return `${questionAnswer}\n\n${repeatCurrentQuestion()}`;
     }
     if (isHelpOrDoubtInput(text) || isUnclearForQuestion(currentQuestion, text)) {
       return clarifyCurrentQuestion();
@@ -814,6 +824,53 @@ Forlad aldrig praeventionsdomaenet. Giv aldrig generel medicinsk raadgivning. Va
     const found = explanations.find(([pattern]) => pattern.test(lower));
     if (found) return `Kort forklaring: ${found[1]}`;
     return contextualExplanation();
+  }
+
+
+  function answerRelevantUserQuestion(text) {
+    const normalized = normalizeChoiceText(text);
+    if (!isUserQuestion(text, normalized)) return "";
+    if (!isQuestionInContraceptionDomain(normalized)) return "";
+
+    const termExplanation = explainUnknownTerm(text);
+    if (termExplanation) return termExplanation;
+
+    if (/effektiv|sikker|virker|procent|risiko/.test(normalized)) {
+      return "Kort svar: Effektivitet afh\u00e6nger af metode og korrekt brug. Systemet registrerer effektivitet i tildelingen.";
+    }
+    if (/bivirkning|blodning|bloeding|smerter|kvalme|hovedpine|humoer|humor|hud|akne|bumser/.test(normalized)) {
+      return "Kort svar: Bivirkninger afh\u00e6nger af metode og krop. Systemet registrerer typiske bivirkninger i output.";
+    }
+    if (/hormon|cyklus|aeglosning|aegloesning/.test(normalized)) {
+      return "Kort svar: Hormoner kan p\u00e5virke cyklus, bl\u00f8dning og \u00e6gl\u00f8sning. Det er en metodekategori.";
+    }
+    if (/koenssygdom|sygdom|smitte|klamydia|sexsygdom/.test(normalized)) {
+      return "Kort svar: K\u00f8nssygdomme kr\u00e6ver barrierebeskyttelse. Kondom og femidom er relevante barrieremetoder.";
+    }
+    if (/spiral|kobber/.test(normalized)) {
+      return "Kort svar: Spiral er en metode, der inds\u00e6ttes i livmoderen. Kobberspiral er uden hormoner. Hormonspiral afgiver hormon lokalt.";
+    }
+    if (/akut|noed|nod|efter sex|kondomet sprang/.test(normalized)) {
+      return "Kort svar: Akut pr\u00e6vention bruges efter ubeskyttet sex eller pr\u00e6ventionssvigt. Det er ikke en fast metode.";
+    }
+    if (/permanent|sterilisation|operation|for altid/.test(normalized)) {
+      return "Kort svar: Permanent pr\u00e6vention er lavet til at vare resten af livet. Systemet klassificerer det som permanent l\u00f8sning.";
+    }
+    if (/hvad skal jeg vaelge|hvad bor jeg|hvad boer jeg|hvilken skal jeg|anbefal|bedst|bedste/.test(normalized)) {
+      return "Kort svar: Systemet v\u00e6lger efter dine input. V\u00e6lg den svarmulighed, der passer bedst til sp\u00f8rgsm\u00e5let.";
+    }
+
+    return "Kort svar: Sp\u00f8rgsm\u00e5let er registreret inden for pr\u00e6ventionsdom\u00e6net.";
+  }
+
+  function isUserQuestion(rawText, normalizedText) {
+    const raw = String(rawText || "").trim();
+    const normalized = normalizedText || normalizeChoiceText(rawText);
+    return /\?/.test(raw) || /^(hvad|hvorfor|hvordan|hvilken|hvilket|hvem|kan|maa|ma|skal|betyder|er det|virker|forklar)\b/.test(normalized);
+  }
+
+  function isQuestionInContraceptionDomain(normalizedText) {
+    return /praevention|beskyttelse|gravid|graviditet|baby|boern|koenssygdom|sygdom|klamydia|smitte|sex|samleje|kondom|femidom|pessar|pille|spiral|kobber|hormon|stav|plaster|ring|sproejte|sterilisation|noed|nod|menstruation|mens|blodning|bloeding|smerter|pms|akne|bumser|hud|pcos|endometriose|bivirkning|daglig|langvarig|akut|permanent|diskret|effektiv|sikker|metode|metoder|valg|vaelge|anbefal/.test(normalizedText);
   }
 
   function contextualExplanation() {
