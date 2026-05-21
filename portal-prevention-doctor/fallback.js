@@ -1387,35 +1387,20 @@ Alt handler om prævention. Alt andet er støj.
     const runId = ++mediaListenRunId;
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error(`Trin 1: Browseren understotter ikke navigator.mediaDevices.getUserMedia. ${browserAudioDiagnostics()}`);
-      }
       if (!mediaStream) {
-        try {
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-        } catch (error) {
-          throw new Error(`Trin 1: Browseren kunne ikke faa adgang til mikrofonen. ${describeError(error)} ${browserAudioDiagnostics()}`);
-        }
-        const audioTracks = mediaStream.getAudioTracks();
-        if (!audioTracks.length) {
-          throw new Error(`Trin 2: Browseren gav en MediaStream uden audio-track. ${mediaStreamDiagnostics(mediaStream)}`);
-        }
-        if (!audioTracks.some((track) => track.readyState === "live")) {
-          throw new Error(`Trin 2: Mikrofon-streamen har ingen live audio-track. ${mediaStreamDiagnostics(mediaStream)}`);
-        }
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
       }
       mediaListening = true;
       mediaTranscriptionLoop(onText, runId);
     } catch (error) {
       mediaListening = false;
       system(document.querySelector(".pd-chat"), `Mikrofon-fejl: ${error.message || error}`);
-      console.error("Microphone startup failed", error);
     }
   }
 
@@ -1445,7 +1430,6 @@ Alt handler om prævention. Alt andet er støj.
         }
       } catch (error) {
         system(activeChat, `Mikrofon/transskription-fejl: ${error.message || error}`);
-        console.error("Microphone/transcription loop failed", error);
         await sleep(800);
       }
     }
@@ -1479,65 +1463,18 @@ Alt handler om prævention. Alt andet er støj.
 
   function recordAudioChunk(durationMs) {
     return new Promise((resolve, reject) => {
-      if (!mediaStream) return reject(new Error("Trin 3: Mikrofon-streamen mangler, saa optagelse kan ikke starte."));
-      if (typeof MediaRecorder === "undefined") {
-        return reject(new Error(`Trin 3: Browseren understotter ikke MediaRecorder. ${browserAudioDiagnostics()}`));
-      }
-      const tracks = mediaStream.getAudioTracks();
-      if (!tracks.length) {
-        return reject(new Error(`Trin 3: MediaRecorder kan ikke starte, fordi streamen ikke har audio-track. ${mediaStreamDiagnostics(mediaStream)}`));
-      }
-      if (!tracks.some((track) => track.readyState === "live")) {
-        return reject(new Error(`Trin 3: MediaRecorder kan ikke starte, fordi audio-track ikke er live. ${mediaStreamDiagnostics(mediaStream)}`));
-      }
-
-      const mimeType = chooseMediaRecorderMimeType();
-      if (!mimeType) {
-        return reject(new Error(`Trin 3: Ingen understottet MediaRecorder audio-type fundet. ${browserAudioDiagnostics()}`));
-      }
-
-      let recorder;
-      try {
-        recorder = new MediaRecorder(mediaStream, { mimeType });
-      } catch (error) {
-        return reject(new Error(`Trin 4: MediaRecorder kunne ikke oprettes med ${mimeType}. ${describeError(error)} ${mediaStreamDiagnostics(mediaStream)}`));
-      }
-
+      if (!mediaStream) return reject(new Error("Mikrofon er ikke klar."));
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(mediaStream, { mimeType });
       const chunks = [];
-      let finished = false;
-      const fail = (message, error) => {
-        if (finished) return;
-        finished = true;
-        reject(new Error(`${message} ${error ? describeError(error) : ""} ${mediaStreamDiagnostics(mediaStream)}`.trim()));
-      };
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) chunks.push(event.data);
       };
-      recorder.onerror = (event) => {
-        fail(`Trin 5: MediaRecorder sendte en error-event under optagelse med ${mimeType}.`, event.error || event);
-      };
-      recorder.onstop = () => {
-        if (finished) return;
-        finished = true;
-        const blob = new Blob(chunks, { type: mimeType });
-        if (!blob.size) {
-          reject(new Error(`Trin 6: MediaRecorder stoppede, men optagelsen er tom. chunks=${chunks.length}, mimeType=${mimeType}. ${mediaStreamDiagnostics(mediaStream)}`));
-          return;
-        }
-        resolve(blob);
-      };
-      try {
-        recorder.start();
-      } catch (error) {
-        fail(`Trin 5: MediaRecorder.start() fejlede med ${mimeType}.`, error);
-        return;
-      }
+      recorder.onerror = () => reject(new Error("Mikrofonoptagelse fejlede."));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      recorder.start();
       window.setTimeout(() => {
-        try {
-          if (recorder.state !== "inactive") recorder.stop();
-        } catch (error) {
-          fail("Trin 6: MediaRecorder.stop() fejlede.", error);
-        }
+        if (recorder.state !== "inactive") recorder.stop();
       }, durationMs);
     });
   }
@@ -1546,70 +1483,19 @@ Alt handler om prævention. Alt andet er støj.
     if (!blob || blob.size < 1200) return "";
     mediaTranscriptBusy = true;
     try {
-      let response;
-      try {
-        response = await fetch("/api/transcribe", {
-          method: "POST",
-          headers: {
-            "Content-Type": blob.type || "audio/webm",
-          },
-          body: blob,
-        });
-      } catch (error) {
-        throw new Error(`Trin 7: Kunne ikke sende lyd til /api/transcribe. blobSize=${blob.size}, blobType=${blob.type || "ukendt"}. ${describeError(error)}`);
-      }
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": blob.type || "audio/webm",
+        },
+        body: blob,
+      });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(`Trin 8: Serveren afviste transskription. HTTP ${response.status}. blobSize=${blob.size}, blobType=${blob.type || "ukendt"}. Serverfejl: ${payload.error || "ukendt"}`);
-      }
+      if (!response.ok) throw new Error(payload.error || `Transcription HTTP ${response.status}`);
       return String(payload.text || "").trim();
     } finally {
       mediaTranscriptBusy = false;
     }
-  }
-
-  function chooseMediaRecorderMimeType() {
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/ogg;codecs=opus",
-      "audio/ogg",
-      "audio/mp4",
-    ];
-    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
-  }
-
-  function describeError(error) {
-    if (!error) return "Ingen browser-detaljer.";
-    const name = error.name ? `name=${error.name}` : "";
-    const message = error.message ? `message=${error.message}` : String(error);
-    const constraint = error.constraint ? `constraint=${error.constraint}` : "";
-    return [name, message, constraint].filter(Boolean).join(", ");
-  }
-
-  function browserAudioDiagnostics() {
-    const mediaRecorderState = typeof MediaRecorder === "undefined" ? "MediaRecorder=false" : "MediaRecorder=true";
-    const supportedTypes = typeof MediaRecorder === "undefined"
-      ? "supportedTypes=none"
-      : `supportedTypes=${[
-          "audio/webm;codecs=opus",
-          "audio/webm",
-          "audio/ogg;codecs=opus",
-          "audio/ogg",
-          "audio/mp4",
-        ].filter((type) => MediaRecorder.isTypeSupported(type)).join(",") || "none"}`;
-    return `origin=${window.location.origin}, protocol=${window.location.protocol}, secureContext=${window.isSecureContext}, ${mediaRecorderState}, ${supportedTypes}, userAgent=${navigator.userAgent}`;
-  }
-
-  function mediaStreamDiagnostics(stream) {
-    if (!stream) return "stream=missing";
-    const tracks = stream.getAudioTracks().map((track, index) => {
-      const settings = typeof track.getSettings === "function" ? track.getSettings() : {};
-      const label = track.label || "no-label";
-      const deviceId = settings.deviceId ? "deviceId=present" : "deviceId=missing";
-      return `track${index} label=${label}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}, ${deviceId}, sampleRate=${settings.sampleRate || "unknown"}, channelCount=${settings.channelCount || "unknown"}`;
-    });
-    return `streamActive=${stream.active}, audioTracks=${tracks.length ? tracks.join(" | ") : "none"}`;
   }
 
   async function speak(text) {
